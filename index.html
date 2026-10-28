@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portafolio | Desarrollador de Software – Habitación 3D interactiva</title>
+  <meta name="description" content="Portafolio interactivo de desarrollador: explora una habitación 3D para ver proyectos, habilidades, sobre mí y contacto." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="loader"><span>Cargando habitación…</span></div>
+  <canvas id="scene"></canvas>
+
+  <header class="brand">
+    <h1>Alex Bello</h1>
+    <p>Desarrollador de Software</p>
+  </header>
+
+  <main id="panels">
+    <section class="panel" id="panel-frontal" data-wall="frontal">
+      <h2>Proyectos</h2>
+      <ul>
+        <li><strong>Proyecto 1</strong><span>Descripción breve y tecnologías.</span></li>
+        <li><strong>Proyecto 2</strong><span>Descripción breve y tecnologías.</span></li>
+        <li><strong>Proyecto 3</strong><span>Descripción breve y tecnologías.</span></li>
+      </ul>
+    </section>
+    <section class="panel" id="panel-izquierda" data-wall="izquierda">
+      <h2>Habilidades</h2>
+      <div class="tags"><span>JavaScript</span><span>TypeScript</span><span>React</span><span>Node.js</span><span>Three.js</span><span>CSS</span><span>Git</span></div>
+    </section>
+    <section class="panel" id="panel-derecha" data-wall="derecha">
+      <h2>Sobre mí</h2>
+      <p>Escribe aquí una breve presentación: quién eres, qué te apasiona y qué buscas.</p>
+    </section>
+    <section class="panel" id="panel-trasera" data-wall="trasera">
+      <h2>Contacto</h2>
+      <p><a href="mailto:tu@correo.com">tu@correo.com</a></p>
+      <p><a href="https://github.com/" target="_blank" rel="noopener">GitHub</a> · <a href="https://linkedin.com/" target="_blank" rel="noopener">LinkedIn</a></p>
+    </section>
+  </main>
+
+  <nav class="nav" aria-label="Navegación de paredes">
+    <button id="btn-izquierda" data-wall="izquierda">◀ Habilidades</button>
+    <button id="btn-frontal" data-wall="frontal" class="active">Proyectos</button>
+    <button id="btn-derecha" data-wall="derecha">Sobre mí ▶</button>
+    <button id="btn-trasera" data-wall="trasera">Contacto</button>
+  </nav>
+
+  <div id="pins" aria-hidden="false"></div>
+
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-body">
+    <div class="modal-card">
+      <button class="modal-close" id="modal-close" aria-label="Cerrar">✕</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+
+  <div id="screen" class="screen" aria-hidden="true" role="dialog" aria-label="Pantalla del computador">
+    <div class="scr-titlebar">
+      <button class="scr-close" id="screen-close" data-close aria-label="Cerrar ventana" title="Cerrar (Esc)"></button>
+      <span class="scr-dot y"></span><span class="scr-dot g"></span>
+      <span class="scr-title">proyectos — Visual Studio Code</span>
+    </div>
+    <div class="scr-body">
+      <aside class="scr-side"><div class="scr-side-title">EXPLORADOR</div><div id="screen-explorer"></div></aside>
+      <section class="scr-main">
+        <div class="scr-tabs"><span id="screen-tab" class="scr-tab"></span></div>
+        <article id="screen-editor" class="scr-editor"></article>
+      </section>
+    </div>
+    <div class="scr-status"><span>⎇ main</span><span>UTF-8</span><span id="screen-clock"></span><span class="scr-exit">Esc para salir</span></div>
+    <div class="scr-scan"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
