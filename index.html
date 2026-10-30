@@ -13,32 +13,35 @@
   <div id="loader"><span>Cargando habitación…</span></div>
   <canvas id="scene"></canvas>
 
-  <header class="brand">
-    <h1>Alex Bello</h1>
-    <p>Desarrollador de Software</p>
+  <header class="top-bar">
+    <div class="brand">
+      <h1>Alex Bello</h1>
+      <p>Desarrollador de Software</p>
+    </div>
+    <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar a modo noche" title="Alternar modo claro / modo noche">
+      <span class="icon-sun">☀️</span>
+      <span class="icon-moon">🌙</span>
+      <span class="theme-label">Modo noche</span>
+    </button>
   </header>
 
   <main id="panels">
     <section class="panel" id="panel-frontal" data-wall="frontal">
-      <h2>Proyectos</h2>
-      <ul>
-        <li><strong>Proyecto 1</strong><span>Descripción breve y tecnologías.</span></li>
-        <li><strong>Proyecto 2</strong><span>Descripción breve y tecnologías.</span></li>
-        <li><strong>Proyecto 3</strong><span>Descripción breve y tecnologías.</span></li>
-      </ul>
+      <h2>Zona de Desarrollo</h2>
+      <p>Estación de trabajo principal. Toca las pantallas para explorar los <strong>Proyectos</strong> interactivos.</p>
     </section>
     <section class="panel" id="panel-izquierda" data-wall="izquierda">
-      <h2>Habilidades</h2>
-      <div class="tags"><span>JavaScript</span><span>TypeScript</span><span>React</span><span>Node.js</span><span>Three.js</span><span>CSS</span><span>Git</span></div>
+      <h2>Librero & Estudio</h2>
+      <p>Toca la estantería para conocer mis <strong>Habilidades</strong>, tecnologías y herramientas que domino.</p>
     </section>
     <section class="panel" id="panel-derecha" data-wall="derecha">
-      <h2>Sobre mí</h2>
-      <p>Escribe aquí una breve presentación: quién eres, qué te apasiona y qué buscas.</p>
+      <h2>Área de Descanso</h2>
+      <p>Toca la ventana para saber más <strong>Sobre mí</strong>, mi enfoque profesional y formación.</p>
+      <p class="curtain-hint">🪟 Haz clic en las cortinas para abrirlas o cerrarlas</p>
     </section>
     <section class="panel" id="panel-trasera" data-wall="trasera">
-      <h2>Contacto</h2>
-      <p><a href="mailto:tu@correo.com">tu@correo.com</a></p>
-      <p><a href="https://github.com/" target="_blank" rel="noopener">GitHub</a> · <a href="https://linkedin.com/" target="_blank" rel="noopener">LinkedIn</a></p>
+      <h2>Salida & Planificación</h2>
+      <p>Toca la puerta o la pizarra para ver información de <strong>Contacto</strong> y redes sociales.</p>
     </section>
   </main>
 
@@ -59,21 +62,29 @@
   </div>
 
 
-  <div id="screen" class="screen" aria-hidden="true" role="dialog" aria-label="Pantalla del computador">
+  <div id="screen" class="screen" aria-hidden="true" role="dialog" aria-label="Mis proyectos">
     <div class="scr-titlebar">
       <button class="scr-close" id="screen-close" data-close aria-label="Cerrar ventana" title="Cerrar (Esc)"></button>
       <span class="scr-dot y"></span><span class="scr-dot g"></span>
-      <span class="scr-title">proyectos — Visual Studio Code</span>
+      <span class="scr-title">Mis proyectos</span>
     </div>
-    <div class="scr-body">
-      <aside class="scr-side"><div class="scr-side-title">EXPLORADOR</div><div id="screen-explorer"></div></aside>
-      <section class="scr-main">
-        <div class="scr-tabs"><span id="screen-tab" class="scr-tab"></span></div>
-        <article id="screen-editor" class="scr-editor"></article>
-      </section>
+    <div class="scr-view" id="screen-view">
+      <div class="scr-list">
+        <header class="scr-head">
+          <h2>Mis proyectos</h2>
+          <span id="screen-count">Haz clic en la tarjeta central para abrirla</span>
+        </header>
+        <div class="cf-stage"><div id="screen-carousel" class="cf-track"></div></div>
+        <div id="screen-caption" class="cf-caption"></div>
+        <div class="cf-nav">
+          <button id="screen-prev" class="cf-arrow" aria-label="Anterior">‹</button>
+          <div id="screen-dots" class="cf-dots"></div>
+          <button id="screen-next" class="cf-arrow" aria-label="Siguiente">›</button>
+        </div>
+      </div>
+      <div id="screen-detail" class="scr-detail"></div>
     </div>
-    <div class="scr-status"><span>⎇ main</span><span>UTF-8</span><span id="screen-clock"></span><span class="scr-exit">Esc para salir</span></div>
-    <div class="scr-scan"></div>
+    <div class="scr-status"><span id="screen-clock"></span><span class="scr-exit">Esc para salir</span></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

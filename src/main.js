@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import anime from 'animejs';
 import { HOTSPOTS, MODALS } from './content.js';
 import { initScreen } from './screen.js';
+import { createWindow3D } from './window3d.js';
 
 const SIZE = 10;
 const H = SIZE / 2;
@@ -19,15 +20,38 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-// ---------- Habitación ----------
+// ---------- Habitación & Texturas (Modo Claro / Modo Oscuro) ----------
 const manager = new THREE.LoadingManager(() => document.getElementById('loader').classList.add('done'));
 const loader = new THREE.TextureLoader(manager);
-const tex = (file) => {
-  const t = loader.load(`/img/${file}.jpg`);
+
+const loadTexture = (path) => {
+  const t = loader.load(path);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return t;
 };
+
+// Carga anticipada de texturas para cambio instantáneo
+const textures = {
+  light: {
+    frontal:   loadTexture('/img/frontal.jpg'),
+    izquierda: loadTexture('/img/izquierda.jpg'),
+    derecha:   loadTexture('/img/derecha.jpg'),
+    trasera:   loadTexture('/img/trasera.jpg'),
+    techo:     loadTexture('/img/techo.jpg'),
+    piso:      loadTexture('/img/piso.jpg'),
+  },
+  dark: {
+    frontal:   loadTexture('/img/dark/frontal.jpg'),
+    izquierda: loadTexture('/img/dark/izquierda.jpg'),
+    derecha:   loadTexture('/img/dark/derecha.jpg'),
+    trasera:   loadTexture('/img/dark/trasera.jpg'),
+    techo:     loadTexture('/img/dark/techo.jpg'),
+    piso:      loadTexture('/img/dark/piso.jpg'),
+  }
+};
+
+let currentTheme = localStorage.getItem('theme') || 'light';
 
 // yaw: ángulo de la cámara para mirar cada pared
 const walls = {
@@ -40,7 +64,7 @@ const walls = {
 for (const [name, w] of Object.entries(walls)) {
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(SIZE, SIZE),
-    new THREE.MeshBasicMaterial({ map: tex(name) })
+    new THREE.MeshBasicMaterial({ map: textures[currentTheme][name] })
   );
   mesh.position.set(...w.pos);
   mesh.rotation.y = w.rotY;
@@ -48,12 +72,51 @@ for (const [name, w] of Object.entries(walls)) {
   w.mesh = mesh;
 }
 
-const cap = (file, y, rotX) => {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshBasicMaterial({ map: tex(file) }));
+const caps = {};
+const cap = (name, y, rotX) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshBasicMaterial({ map: textures[currentTheme][name] }));
   m.position.y = y; m.rotation.x = rotX; scene.add(m);
+  caps[name] = m;
 };
 cap('techo', H, Math.PI / 2);
 cap('piso', -H, -Math.PI / 2);
+
+// ---------- Ventana 3D con cortinas en pared derecha ----------
+const window3d = createWindow3D(walls.derecha.mesh, currentTheme);
+walls.derecha.mesh.add(window3d.group);
+
+function applyTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem('theme', theme);
+  document.body.classList.toggle('dark-theme', theme === 'dark');
+  
+  for (const [name, w] of Object.entries(walls)) {
+    w.mesh.material.map = textures[theme][name];
+    w.mesh.material.needsUpdate = true;
+  }
+  for (const [name, m] of Object.entries(caps)) {
+    m.material.map = textures[theme][name];
+    m.material.needsUpdate = true;
+  }
+  
+  // Actualizar color de cortinas con el tema
+  window3d.setTheme(theme);
+  
+  const themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) {
+    themeToggle.querySelector('.theme-label').textContent = theme === 'dark' ? 'Modo día' : 'Modo noche';
+  }
+}
+
+const themeBtn = document.getElementById('theme-toggle');
+if (themeBtn) {
+  themeBtn.addEventListener('click', () => {
+    applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  });
+}
+if (currentTheme === 'dark') {
+  applyTheme('dark');
+}
 
 // ---------- Hotspots (THREE.Raycaster) ----------
 // Cada hotspot es un plano invisible hijo de su pared. Se define con coordenadas UV de la imagen
@@ -93,6 +156,11 @@ const ndc = new THREE.Vector2();
 function pick(clientX, clientY) {
   ndc.set((clientX / window.innerWidth) * 2 - 1, -(clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
+  
+  // Verificar clic en las cortinas (estén plegadas a los lados o cerradas)
+  const curtainHit = raycaster.intersectObjects(window3d.curtainMeshes, false)[0];
+  if (curtainHit) return { isCurtain: true };
+  
   const hit = raycaster.intersectObjects(hotspotMeshes, false)[0];
   return hit ? hit.object.userData.hotspot : null;
 }
@@ -100,9 +168,9 @@ function pick(clientX, clientY) {
 let hovered = null;
 function setHover(h) {
   if (h === hovered) return;
-  if (hovered) anime({ targets: hovered.mesh.material, opacity: 0, duration: 250, easing: 'linear' });
+  if (hovered && hovered.mesh) anime({ targets: hovered.mesh.material, opacity: 0, duration: 250, easing: 'linear' });
   hovered = h;
-  if (h) anime({ targets: h.mesh.material, opacity: 0.2, duration: 250, easing: 'linear' });
+  if (h && h.mesh) anime({ targets: h.mesh.material, opacity: 0.2, duration: 250, easing: 'linear' });
   canvas.style.cursor = h ? 'pointer' : '';
 }
 
@@ -178,12 +246,41 @@ function zoomTo(h, done) {
   moveCamera({ pos: end.toArray(), yaw, pitch, fov: ZOOM_FOV, duration: 1400, easing: 'easeInOutCubic', complete: done });
 }
 
+let windowModalTimer = null;
+
 function activate(h) {
   if (locked) return;
+  // Manejar clic en cortinas
+  if (h && h.isCurtain) {
+    window3d.toggleCurtains();
+    return;
+  }
   locked = true;
   activeHotspot = h;
   setHover(null);
   document.body.classList.add('zoomed');
+
+  // Si es "Sobre mí" (ventana): primero abre la ventana, hace zoom para apreciar el paisaje,
+  // y unos segundos después muestra el modal
+  if (h.id === 'ventana') {
+    clearTimeout(windowModalTimer);
+    let delay = 0;
+    if (!window3d.curtainState.open) {
+      window3d.toggleCurtains();
+      delay += 600;
+    }
+    windowModalTimer = setTimeout(() => {
+      window3d.setWindowOpen(true);
+      zoomTo(h, () => {
+        // Espera unos instantes con la ventana abierta antes de mostrar el modal
+        windowModalTimer = setTimeout(() => {
+          if (locked && activeHotspot === h) openModal(h);
+        }, 900);
+      });
+    }, delay);
+    return;
+  }
+
   zoomTo(h, () => (h.fullscreen ? openScreen(h) : openModal(h)));
 }
 
@@ -226,9 +323,15 @@ function openScreen(h) {
   screenEl.classList.add('open');
   screenEl.setAttribute('aria-hidden', 'false');
   anime.remove(screenEl);
+  screenUI.showGrid();
+  anime({
+    targets: screenEl.querySelector('.cf-stage'),
+    opacity: [0, 1], scale: [0.85, 1], translateY: [30, 0],
+    delay: 900, duration: 900, easing: 'easeOutCubic',
+  });
   anime({ targets: screenEl, clipPath: 'inset(0px 0px 0px 0px round 0px)', duration: 900, easing: 'easeInOutCubic' });
   anime({
-    targets: screenEl.querySelectorAll('.scr-titlebar, .scr-side, .scr-main, .scr-status'),
+    targets: screenEl.querySelectorAll('.scr-titlebar, .scr-view, .scr-status'),
     opacity: [0, 1], delay: anime.stagger(90, { start: 500 }), duration: 500, easing: 'easeOutQuad',
   });
   screenEl.querySelector('.scr-close').focus();
@@ -264,11 +367,15 @@ function closeModal(immediate = false) {
     }
   }
   const wasOpen = modal.classList.contains('open');
+  clearTimeout(windowModalTimer);
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
   const h = activeHotspot;
   activeHotspot = null;
   document.body.classList.remove('zoomed');
+  if (h && h.id === 'ventana') {
+    setTimeout(() => window3d.setWindowOpen(false), immediate ? 0 : 350);
+  }
   if (immediate) { locked = false; return; } // mirarPared se encarga de mover la cámara
   if (wasOpen || h) {
     yawTarget = wrapNear(walls[h ? h.wall : current].yaw, camera.rotation.y);
@@ -331,14 +438,20 @@ function updatePins() {
   const show = !locked;
   for (const h of HOTSPOTS) {
     v.copy(h.center).project(camera);
-    const visible = show && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+    const coveredByCurtain = h.id === 'ventana' && !window3d.curtainState.open;
+    const visible = show && !coveredByCurtain && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
     h.pin.style.opacity = visible ? 1 : 0;
     h.pin.style.pointerEvents = visible ? 'auto' : 'none';
     h.pin.style.transform = `translate(${(v.x + 1) / 2 * window.innerWidth}px, ${(1 - v.y) / 2 * window.innerHeight}px) translate(-50%, -50%)`;
   }
 }
 
+// ---------- Reloj para animación de cortinas ----------
+const clock3d = new THREE.Clock();
+
 renderer.setAnimationLoop(() => {
+  const dt = clock3d.getDelta();
+  window3d.update(dt);
   updatePins();
   renderer.render(scene, camera);
 });
