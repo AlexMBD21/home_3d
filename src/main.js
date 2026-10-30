@@ -3,15 +3,20 @@ import anime from 'animejs';
 import { HOTSPOTS, MODALS } from './content.js';
 import { initScreen } from './screen.js';
 import { createWindow3D } from './window3d.js';
+import { createFurniture3D } from './furniture3d.js';
+import { createShelves3D } from './shelves3d.js';
+import { createBookcase3D } from './bookcase3d.js';
+import { createDoor3D } from './door3d.js';
 
 const SIZE = 10;
 const H = SIZE / 2;
-const BASE_FOV = 75;
+const BASE_FOV = 84;
 const ZOOM_FOV = 50;
+const CAMERA_BACK = 2.3; // distancia hacia atrás desde el centro para ver todo el panorama
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 0); // centro de la habitación
+camera.position.set(0, 0, CAMERA_BACK); // vista panorámica inicial frente a la pared frontal
 camera.rotation.order = 'YXZ';
 
 const canvas = document.getElementById('scene');
@@ -53,12 +58,12 @@ const textures = {
 
 let currentTheme = localStorage.getItem('theme') || 'light';
 
-// yaw: ángulo de la cámara para mirar cada pared
+// yaw y camPos: ángulo y posición retrocedida de la cámara para ver el panorama completo de cada pared
 const walls = {
-  frontal:   { pos: [0, 0, -H], rotY: 0,            yaw: 0 },
-  izquierda: { pos: [-H, 0, 0], rotY: Math.PI / 2,  yaw: Math.PI / 2 },
-  derecha:   { pos: [H, 0, 0],  rotY: -Math.PI / 2, yaw: -Math.PI / 2 },
-  trasera:   { pos: [0, 0, H],  rotY: Math.PI,      yaw: Math.PI },
+  frontal:   { pos: [0, 0, -H], rotY: 0,            yaw: 0,            camPos: [0, 0, CAMERA_BACK] },
+  izquierda: { pos: [-H, 0, 0], rotY: Math.PI / 2,  yaw: Math.PI / 2,  camPos: [CAMERA_BACK, 0, 0] },
+  derecha:   { pos: [H, 0, 0],  rotY: -Math.PI / 2, yaw: -Math.PI / 2, camPos: [-CAMERA_BACK, 0, 0] },
+  trasera:   { pos: [0, 0, H],  rotY: Math.PI,      yaw: Math.PI,      camPos: [0, 0, -CAMERA_BACK] },
 };
 
 for (const [name, w] of Object.entries(walls)) {
@@ -85,6 +90,37 @@ cap('piso', -H, -Math.PI / 2);
 const window3d = createWindow3D(walls.derecha.mesh, currentTheme);
 walls.derecha.mesh.add(window3d.group);
 
+// ---------- 4 Estantes flotantes 3D con tiras LED en pared frontal ----------
+const shelves3d = createShelves3D(currentTheme);
+walls.frontal.mesh.add(shelves3d.group);
+
+// ---------- Mueble librero 3D con sombras en pared izquierda (Habilidades) ----------
+const bookcase3d = createBookcase3D(currentTheme);
+walls.izquierda.mesh.add(bookcase3d.group);
+
+// ---------- Puerta 3D con molduras y sombras en pared trasera (Contacto) ----------
+const door3d = createDoor3D(currentTheme);
+walls.trasera.mesh.add(door3d.group);
+
+// ---------- Escritorio 3D cerca de la pared frontal ----------
+const furniture3d = createFurniture3D(manager, currentTheme, ({ box, center, size }) => {
+  const pcHotspot = HOTSPOTS.find((h) => h.id === 'pc');
+  if (!pcHotspot || !pcHotspot.mesh) return;
+
+  // Mover el plano de proyección del hotspot 'pc' desde la pared hasta la posición 3D exacta de los 2 monitores
+  scene.add(pcHotspot.mesh);
+  pcHotspot.mesh.geometry.dispose();
+  pcHotspot.mesh.geometry = new THREE.PlaneGeometry(size.x, size.y);
+  pcHotspot.mesh.position.set(center.x, center.y, box.max.z);
+  pcHotspot.mesh.rotation.set(0, 0, 0);
+  pcHotspot.mesh.updateWorldMatrix(true, false);
+
+  pcHotspot.size = { w: size.x, h: size.y };
+  pcHotspot.center.set(center.x, center.y, box.max.z);
+  pcHotspot.is3DMonitor = true;
+});
+scene.add(furniture3d.group);
+
 function applyTheme(theme) {
   currentTheme = theme;
   localStorage.setItem('theme', theme);
@@ -99,8 +135,12 @@ function applyTheme(theme) {
     m.material.needsUpdate = true;
   }
   
-  // Actualizar color de cortinas con el tema
+  // Actualizar color de cortinas, estantes LED, librero 3D, puerta 3D y luces de muebles 3D con el tema
   window3d.setTheme(theme);
+  shelves3d.setTheme(theme);
+  bookcase3d.setTheme(theme);
+  door3d.setTheme(theme);
+  furniture3d.setTheme(theme);
   
   const themeToggle = document.getElementById('theme-toggle');
   if (themeToggle) {
@@ -132,14 +172,23 @@ for (const h of HOTSPOTS) {
     new THREE.PlaneGeometry(w, hh),
     new THREE.MeshBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0, depthWrite: false })
   );
-  mesh.position.set(((u0 + u1) / 2 - 0.5) * SIZE, (0.5 - (v0 + v1) / 2) * SIZE, 0.02);
+  const zOffset = h.id === 'libreros' ? bookcase3d.depth + 0.03 : 0.02;
+  mesh.position.set(((u0 + u1) / 2 - 0.5) * SIZE, (0.5 - (v0 + v1) / 2) * SIZE, zOffset);
   walls[h.wall].mesh.add(mesh);
   mesh.updateWorldMatrix(true, false);
   h.mesh = mesh;
   h.size = { w, h: hh };
   h.center = mesh.getWorldPosition(new THREE.Vector3());
   mesh.userData.hotspot = h;
-  hotspotMeshes.push(mesh);
+  if (h.id === 'libreros') {
+    h.isBookcase = true; // no usar el recuadro completo; se interactúa directamente con los libros y el tocadiscos
+  } else if (h.id === 'puerta') {
+    h.is3DDoor = true; // resaltar directamente la hoja y molduras 3D de la puerta
+  } else if (h.id === 'pizarra') {
+    h.is3DBoard = true; // resaltar directamente el marco de madera 3D de la pizarra
+  } else {
+    hotspotMeshes.push(mesh);
+  }
 
   const pin = document.createElement('button');
   pin.className = 'pin';
@@ -161,16 +210,70 @@ function pick(clientX, clientY) {
   const curtainHit = raycaster.intersectObjects(window3d.curtainMeshes, false)[0];
   if (curtainHit) return { isCurtain: true };
   
+  // Verificar clic en la silla 3D (antes que el escritorio por estar delante)
+  const chairHit = raycaster.intersectObjects(furniture3d.chairMeshes, true)[0];
+  if (chairHit) return { isChair: true };
+
+  // Verificar clic directamente sobre las 2 pantallas 3D de los monitores
+  const monitorHit = raycaster.intersectObjects(furniture3d.monitorMeshes, true)[0];
+  if (monitorHit) return HOTSPOTS.find((h) => h.id === 'pc') || null;
+
+  // Verificar clic en el tocadiscos 3D del estante (reproduce canción y gira el vinilo)
+  const turntableHit = raycaster.intersectObjects(bookcase3d.turntableMeshes, true)[0];
+  if (turntableHit) return { isTurntable: true };
+
+  // Verificar clic en los libros 3D del estante para abrir Habilidades
+  const bookHit = raycaster.intersectObjects(bookcase3d.bookMeshes, true)[0];
+  if (bookHit) return HOTSPOTS.find((h) => h.id === 'libreros') || null;
+
+  // Verificar clic en la puerta 3D para abrir Contacto
+  const doorHit = raycaster.intersectObjects(door3d.doorMeshes, true)[0];
+  if (doorHit) return HOTSPOTS.find((h) => h.id === 'puerta') || null;
+
+  // Verificar clic en el marco/pizarra 3D para abrir Contacto
+  const boardHit = raycaster.intersectObjects(door3d.boardMeshes, true)[0];
+  if (boardHit) return HOTSPOTS.find((h) => h.id === 'pizarra') || null;
+
   const hit = raycaster.intersectObjects(hotspotMeshes, false)[0];
-  return hit ? hit.object.userData.hotspot : null;
+  if (hit) return hit.object.userData.hotspot;
+
+  return null;
 }
 
 let hovered = null;
 function setHover(h) {
   if (h === hovered) return;
-  if (hovered && hovered.mesh) anime({ targets: hovered.mesh.material, opacity: 0, duration: 250, easing: 'linear' });
+  if (hovered) {
+    if (hovered.is3DMonitor) {
+      furniture3d.setMonitorHover(false);
+    } else if (hovered.isBookcase) {
+      bookcase3d.setBooksHover(false);
+    } else if (hovered.isTurntable) {
+      bookcase3d.setTurntableHover(false);
+    } else if (hovered.is3DDoor) {
+      door3d.setDoorHover(false);
+    } else if (hovered.is3DBoard) {
+      door3d.setBoardHover(false);
+    } else if (hovered.mesh) {
+      anime({ targets: hovered.mesh.material, opacity: 0, duration: 250, easing: 'linear' });
+    }
+  }
   hovered = h;
-  if (h && h.mesh) anime({ targets: h.mesh.material, opacity: 0.2, duration: 250, easing: 'linear' });
+  if (h) {
+    if (h.is3DMonitor) {
+      furniture3d.setMonitorHover(true);
+    } else if (h.isBookcase) {
+      bookcase3d.setBooksHover(true);
+    } else if (h.isTurntable) {
+      bookcase3d.setTurntableHover(true);
+    } else if (h.is3DDoor) {
+      door3d.setDoorHover(true);
+    } else if (h.is3DBoard) {
+      door3d.setBoardHover(true);
+    } else if (h.mesh) {
+      anime({ targets: h.mesh.material, opacity: 0.2, duration: 250, easing: 'linear' });
+    }
+  }
   canvas.style.cursor = h ? 'pointer' : '';
 }
 
@@ -222,8 +325,9 @@ function mirarPared(name) {
   if (!walls[name]) return;
   closeModal(true);
   current = name;
-  yawTarget = wrapNear(walls[name].yaw, camera.rotation.y);
-  moveCamera({ yaw: yawTarget });
+  const targetWall = walls[name];
+  yawTarget = wrapNear(targetWall.yaw, camera.rotation.y);
+  moveCamera({ pos: targetWall.camPos, yaw: yawTarget });
   showPanel(name);
 }
 
@@ -255,6 +359,16 @@ function activate(h) {
     window3d.toggleCurtains();
     return;
   }
+  // Manejar clic en silla 3D
+  if (h && h.isChair) {
+    furniture3d.spinChair();
+    return;
+  }
+  // Manejar clic en tocadiscos 3D (girar vinilo y sonar música)
+  if (h && h.isTurntable) {
+    bookcase3d.toggleTurntable();
+    return;
+  }
   locked = true;
   activeHotspot = h;
   setHover(null);
@@ -279,6 +393,10 @@ function activate(h) {
       });
     }, delay);
     return;
+  }
+
+  if (h.id === 'puerta') {
+    door3d.setDoorOpen(true);
   }
 
   zoomTo(h, () => (h.fullscreen ? openScreen(h) : openModal(h)));
@@ -376,34 +494,63 @@ function closeModal(immediate = false) {
   if (h && h.id === 'ventana') {
     setTimeout(() => window3d.setWindowOpen(false), immediate ? 0 : 350);
   }
+  if (h && h.id === 'puerta') {
+    setTimeout(() => door3d.setDoorOpen(false), immediate ? 0 : 250);
+  }
   if (immediate) { locked = false; return; } // mirarPared se encarga de mover la cámara
   if (wasOpen || h) {
-    yawTarget = wrapNear(walls[h ? h.wall : current].yaw, camera.rotation.y);
-    moveCamera({ yaw: yawTarget, duration: 1000, easing: 'easeInOutCubic', complete: () => { locked = false; } });
+    const targetWall = walls[h ? h.wall : current];
+    yawTarget = wrapNear(targetWall.yaw, camera.rotation.y);
+    moveCamera({ pos: targetWall.camPos, yaw: yawTarget, duration: 1000, easing: 'easeInOutCubic', complete: () => { locked = false; } });
   }
 }
 
 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 modal.querySelector('.modal-close').addEventListener('click', () => closeModal());
 
-// ---------- Entrada ----------
+// ---------- Entrada y Movimiento en Primera Persona (WASD / Flechas + giro 360°) ----------
 buttons.forEach((b) => b.addEventListener('click', () => mirarPared(b.dataset.wall)));
 
-const order = ['frontal', 'derecha', 'trasera', 'izquierda']; // sentido horario
+const keysPressed = new Set();
+const moveKeys = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') return closeModal();
   if (locked) return;
-  const i = order.indexOf(current);
-  if (e.key === 'ArrowRight') mirarPared(order[(i + 1) % 4]);
-  if (e.key === 'ArrowLeft') mirarPared(order[(i + 3) % 4]);
+  if (moveKeys.has(e.code)) {
+    keysPressed.add(e.code);
+  }
 });
 
-// Arrastrar para mirar un poco; un toque sin mover abre el hotspot
+window.addEventListener('keyup', (e) => {
+  keysPressed.delete(e.code);
+});
+
+window.addEventListener('blur', () => keysPressed.clear());
+
+// Detecta qué pared está mirando el usuario según el ángulo yaw actual para actualizar el panel
+function syncWallFromYaw(yaw) {
+  let bestWall = current;
+  let minDiff = Infinity;
+  for (const [name, w] of Object.entries(walls)) {
+    const diff = Math.abs(wrapNear(w.yaw, yaw) - yaw);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestWall = name;
+    }
+  }
+  if (bestWall !== current) {
+    current = bestWall;
+    showPanel(bestWall);
+  }
+}
+
+// Arrastrar para girar libremente 360° en primera persona; un clic sin arrastrar abre el hotspot
 let dragging = false, moved = 0, lx = 0, ly = 0;
 canvas.addEventListener('pointerdown', (e) => {
   if (locked) return;
   dragging = true; moved = 0; lx = e.clientX; ly = e.clientY;
-  anime.remove(camera.rotation);
+  anime.remove([camera.rotation, camera.position]);
 });
 window.addEventListener('pointermove', (e) => {
   if (locked) return;
@@ -412,10 +559,19 @@ window.addEventListener('pointermove', (e) => {
     return;
   }
   moved += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly);
-  camera.rotation.y = THREE.MathUtils.clamp(camera.rotation.y + (e.clientX - lx) * 0.003, yawTarget - 0.5, yawTarget + 0.5);
-  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + (e.clientY - ly) * 0.003, -0.35, 0.35);
+  camera.rotation.y += (e.clientX - lx) * 0.004;
+  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + (e.clientY - ly) * 0.004, -0.75, 0.75);
+  yawTarget = camera.rotation.y;
+  syncWallFromYaw(camera.rotation.y);
   lx = e.clientX; ly = e.clientY;
 });
+
+// Rueda del ratón para acercar/alejar el panorama libremente cuando no hay modal abierto
+canvas.addEventListener('wheel', (e) => {
+  if (locked) return;
+  camera.fov = THREE.MathUtils.clamp(camera.fov + e.deltaY * 0.03, 55, 96);
+  camera.updateProjectionMatrix();
+}, { passive: true });
 window.addEventListener('pointerup', (e) => {
   if (!dragging) return;
   dragging = false;
@@ -423,7 +579,6 @@ window.addEventListener('pointerup', (e) => {
     const h = pick(e.clientX, e.clientY);
     if (h) { activate(h); return; }
   }
-  anime({ targets: camera.rotation, y: yawTarget, x: 0, duration: 700, easing: 'easeOutCubic' });
 });
 
 window.addEventListener('resize', () => {
@@ -446,12 +601,45 @@ function updatePins() {
   }
 }
 
-// ---------- Reloj para animación de cortinas ----------
+// ---------- Reloj para animación de cortinas y desplazamiento en primera persona ----------
 const clock3d = new THREE.Clock();
+const WALK_SPEED = 3.8;
+
+function updateFirstPersonMovement(dt) {
+  if (locked || keysPressed.size === 0) return;
+
+  let forward = 0;
+  let strafe = 0;
+  if (keysPressed.has('KeyW') || keysPressed.has('ArrowUp')) forward += 1;
+  if (keysPressed.has('KeyS') || keysPressed.has('ArrowDown')) forward -= 1;
+  if (keysPressed.has('KeyD') || keysPressed.has('ArrowRight')) strafe += 1;
+  if (keysPressed.has('KeyA') || keysPressed.has('ArrowLeft')) strafe -= 1;
+
+  if (forward === 0 && strafe === 0) return;
+
+  anime.remove(camera.position);
+  const len = Math.hypot(forward, strafe);
+  forward /= len;
+  strafe /= len;
+
+  const yaw = camera.rotation.y;
+  const sinY = Math.sin(yaw);
+  const cosY = Math.cos(yaw);
+
+  // Dirección horizontal según hacia dónde mira la cámara
+  const dx = (-sinY * forward + cosY * strafe) * WALK_SPEED * dt;
+  const dz = (-cosY * forward - sinY * strafe) * WALK_SPEED * dt;
+
+  // Límites de colisión suaves dentro de la habitación para no atravesar paredes ni muebles
+  camera.position.x = THREE.MathUtils.clamp(camera.position.x + dx, -3.55, 3.85);
+  camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, -1.65, 3.85);
+}
 
 renderer.setAnimationLoop(() => {
-  const dt = clock3d.getDelta();
+  const dt = Math.min(clock3d.getDelta(), 0.05);
+  updateFirstPersonMovement(dt);
   window3d.update(dt);
+  bookcase3d.update(dt);
   updatePins();
   renderer.render(scene, camera);
 });
