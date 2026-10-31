@@ -7,6 +7,8 @@ import { createFurniture3D } from './furniture3d.js';
 import { createShelves3D } from './shelves3d.js';
 import { createBookcase3D } from './bookcase3d.js';
 import { createDoor3D } from './door3d.js';
+import { createCeilingLamp3D } from './ceiling3d.js';
+import { setupProceduralWalls3D } from './walls3d.js';
 
 const SIZE = 10;
 const H = SIZE / 2;
@@ -36,27 +38,11 @@ const loadTexture = (path) => {
   return t;
 };
 
-// Carga anticipada de texturas para cambio instantáneo
-const textures = {
-  light: {
-    frontal:   loadTexture('/img/frontal.jpg'),
-    izquierda: loadTexture('/img/izquierda.jpg'),
-    derecha:   loadTexture('/img/derecha.jpg'),
-    trasera:   loadTexture('/img/trasera.jpg'),
-    techo:     loadTexture('/img/techo.jpg'),
-    piso:      loadTexture('/img/piso.jpg'),
-  },
-  dark: {
-    frontal:   loadTexture('/img/dark/frontal.jpg'),
-    izquierda: loadTexture('/img/dark/izquierda.jpg'),
-    derecha:   loadTexture('/img/dark/derecha.jpg'),
-    trasera:   loadTexture('/img/dark/trasera.jpg'),
-    techo:     loadTexture('/img/dark/techo.jpg'),
-    piso:      loadTexture('/img/dark/piso.jpg'),
-  }
-};
-
-let currentTheme = localStorage.getItem('theme') || 'light';
+// Solo se precarga la textura del piso; las 4 paredes y el techo se generan proceduralmente en 3D
+const floorTexture = loadTexture('/img/piso.jpg');
+const currentTheme = 'light';
+localStorage.removeItem('theme');
+document.body.classList.remove('dark-theme');
 
 // yaw y camPos: ángulo y posición retrocedida de la cámara para ver el panorama completo de cada pared
 const walls = {
@@ -69,7 +55,7 @@ const walls = {
 for (const [name, w] of Object.entries(walls)) {
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(SIZE, SIZE),
-    new THREE.MeshBasicMaterial({ map: textures[currentTheme][name] })
+    new THREE.MeshBasicMaterial()
   );
   mesh.position.set(...w.pos);
   mesh.rotation.y = w.rotY;
@@ -79,15 +65,31 @@ for (const [name, w] of Object.entries(walls)) {
 
 const caps = {};
 const cap = (name, y, rotX) => {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshBasicMaterial({ map: textures[currentTheme][name] }));
+  const mat = name === 'piso'
+    ? new THREE.MeshBasicMaterial({ map: floorTexture })
+    : new THREE.MeshBasicMaterial();
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), mat);
   m.position.y = y; m.rotation.x = rotX; scene.add(m);
   caps[name] = m;
 };
 cap('techo', H, Math.PI / 2);
 cap('piso', -H, -Math.PI / 2);
 
+// ---------- Paredes procedurales con zócalos y cornisas en 3D ----------
+const walls3d = setupProceduralWalls3D(walls, currentTheme);
+
+// Estado global de iluminación del cuarto (cortinas abiertas 0..1 y luz del techo 0..1)
+const roomLightState = {
+  curtainOpen: 1.0,
+  ceilingPower: 1.0,
+  ready: false,
+};
+
 // ---------- Ventana 3D con cortinas en pared derecha ----------
-const window3d = createWindow3D(walls.derecha.mesh, currentTheme);
+const window3d = createWindow3D(walls.derecha.mesh, currentTheme, (curtainOpenFactor) => {
+  roomLightState.curtainOpen = curtainOpenFactor;
+  if (roomLightState.ready) syncRoomLighting();
+});
 walls.derecha.mesh.add(window3d.group);
 
 // ---------- 4 Estantes flotantes 3D con tiras LED en pared frontal ----------
@@ -98,9 +100,16 @@ walls.frontal.mesh.add(shelves3d.group);
 const bookcase3d = createBookcase3D(currentTheme);
 walls.izquierda.mesh.add(bookcase3d.group);
 
-// ---------- Puerta 3D con molduras y sombras en pared trasera (Contacto) ----------
+// ---------- Puerta 3D, pizarra 3D y perchero 3D en pared trasera (Contacto) ----------
 const door3d = createDoor3D(currentTheme);
 walls.trasera.mesh.add(door3d.group);
+
+// ---------- Techo procedural + Lámpara empotrada 3D y detector de humo (controlable) ----------
+const ceiling3d = createCeilingLamp3D(currentTheme, caps.techo, (power) => {
+  roomLightState.ceilingPower = power;
+  if (roomLightState.ready) syncRoomLighting();
+});
+caps.techo.add(ceiling3d.group);
 
 // ---------- Escritorio 3D cerca de la pared frontal ----------
 const furniture3d = createFurniture3D(manager, currentTheme, ({ box, center, size }) => {
@@ -121,42 +130,26 @@ const furniture3d = createFurniture3D(manager, currentTheme, ({ box, center, siz
 });
 scene.add(furniture3d.group);
 
-function applyTheme(theme) {
-  currentTheme = theme;
-  localStorage.setItem('theme', theme);
-  document.body.classList.toggle('dark-theme', theme === 'dark');
-  
-  for (const [name, w] of Object.entries(walls)) {
-    w.mesh.material.map = textures[theme][name];
-    w.mesh.material.needsUpdate = true;
-  }
-  for (const [name, m] of Object.entries(caps)) {
-    m.material.map = textures[theme][name];
-    m.material.needsUpdate = true;
-  }
-  
-  // Actualizar color de cortinas, estantes LED, librero 3D, puerta 3D y luces de muebles 3D con el tema
-  window3d.setTheme(theme);
-  shelves3d.setTheme(theme);
-  bookcase3d.setTheme(theme);
-  door3d.setTheme(theme);
-  furniture3d.setTheme(theme);
-  
-  const themeToggle = document.getElementById('theme-toggle');
-  if (themeToggle) {
-    themeToggle.querySelector('.theme-label').textContent = theme === 'dark' ? 'Modo día' : 'Modo noche';
-  }
-}
+roomLightState.ready = true;
+function syncRoomLighting() {
+  if (!roomLightState.ready) return;
+  const { curtainOpen, ceilingPower } = roomLightState;
 
-const themeBtn = document.getElementById('theme-toggle');
-if (themeBtn) {
-  themeBtn.addEventListener('click', () => {
-    applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
-  });
+  walls3d.setCurtainOpen(curtainOpen);
+  walls3d.setCeilingLightPower(ceilingPower);
+  ceiling3d.setCurtainOpen(curtainOpen);
+  window3d.setRoomLightPower(ceilingPower);
+  furniture3d.setRoomLighting({ curtainOpen, ceilingPower });
+  bookcase3d.setRoomLighting({ curtainOpen, ceilingPower });
+  door3d.setRoomLighting({ curtainOpen, ceilingPower });
+
+  // Oscurecer también el piso proporcionalmente a las cortinas y a la luz del techo
+  if (caps.piso && caps.piso.material) {
+    const floorFactor = 0.18 + 0.50 * curtainOpen + 0.32 * ceilingPower;
+    caps.piso.material.color.setScalar(floorFactor);
+  }
 }
-if (currentTheme === 'dark') {
-  applyTheme('dark');
-}
+syncRoomLighting();
 
 // ---------- Hotspots (THREE.Raycaster) ----------
 // Cada hotspot es un plano invisible hijo de su pared. Se define con coordenadas UV de la imagen
@@ -190,14 +183,17 @@ for (const h of HOTSPOTS) {
     hotspotMeshes.push(mesh);
   }
 
-  const pin = document.createElement('button');
-  pin.className = 'pin';
-  pin.id = `pin-${h.id}`;
-  pin.setAttribute('aria-label', h.label);
-  pin.innerHTML = `<i></i><span>${h.label}</span>`;
-  pin.addEventListener('click', (e) => { e.stopPropagation(); activate(h); });
-  pinsEl.appendChild(pin);
-  h.pin = pin;
+  // Solo crear el punto informativo (pin) para el PC por ahora
+  if (h.id === 'pc') {
+    const pin = document.createElement('button');
+    pin.className = 'pin';
+    pin.id = `pin-${h.id}`;
+    pin.setAttribute('aria-label', h.label);
+    pin.innerHTML = `<i></i><span>${h.label}</span>`;
+    pin.addEventListener('click', (e) => { e.stopPropagation(); activate(h); });
+    pinsEl.appendChild(pin);
+    h.pin = pin;
+  }
 }
 
 const raycaster = new THREE.Raycaster();
@@ -225,6 +221,10 @@ function pick(clientX, clientY) {
   // Verificar clic en los libros 3D del estante para abrir Habilidades
   const bookHit = raycaster.intersectObjects(bookcase3d.bookMeshes, true)[0];
   if (bookHit) return HOTSPOTS.find((h) => h.id === 'libreros') || null;
+
+  // Verificar clic en el interruptor 3D al lado de la puerta (controla la luz del techo)
+  const switchHit = raycaster.intersectObjects(door3d.switchMeshes, true)[0];
+  if (switchHit) return { isWallSwitch: true };
 
   // Verificar clic en la puerta 3D para abrir Contacto
   const doorHit = raycaster.intersectObjects(door3d.doorMeshes, true)[0];
@@ -254,6 +254,8 @@ function setHover(h) {
       door3d.setDoorHover(false);
     } else if (hovered.is3DBoard) {
       door3d.setBoardHover(false);
+    } else if (hovered.isWallSwitch) {
+      door3d.setSwitchHover(false);
     } else if (hovered.mesh) {
       anime({ targets: hovered.mesh.material, opacity: 0, duration: 250, easing: 'linear' });
     }
@@ -270,6 +272,8 @@ function setHover(h) {
       door3d.setDoorHover(true);
     } else if (h.is3DBoard) {
       door3d.setBoardHover(true);
+    } else if (h.isWallSwitch) {
+      door3d.setSwitchHover(true);
     } else if (h.mesh) {
       anime({ targets: h.mesh.material, opacity: 0.2, duration: 250, easing: 'linear' });
     }
@@ -305,18 +309,11 @@ const panels = document.querySelectorAll('.panel');
 const buttons = document.querySelectorAll('.nav button');
 
 function showPanel(name) {
+  // Avisos de zonas ocultos temporalmente mientras se diseña la habitación y sus interacciones
   panels.forEach((p) => {
-    const active = p.dataset.wall === name;
-    p.classList.toggle('visible', active);
+    p.classList.remove('visible');
     anime.remove(p);
-    anime({
-      targets: p,
-      opacity: active ? 1 : 0,
-      translateY: active ? ['-40%', '-50%'] : '-45%',
-      duration: active ? 700 : 300,
-      delay: active ? 900 : 0,
-      easing: 'easeOutCubic',
-    });
+    p.style.opacity = '0';
   });
   buttons.forEach((b) => b.classList.toggle('active', b.dataset.wall === name));
 }
@@ -369,35 +366,34 @@ function activate(h) {
     bookcase3d.toggleTurntable();
     return;
   }
+  // Manejar clic únicamente desde el interruptor de pared 3D (encender/apagar luz del techo)
+  if (h && h.isWallSwitch) {
+    ceiling3d.toggleLight();
+    door3d.setSwitchState(ceiling3d.state.on);
+    return;
+  }
+  // Manejar clic en ventana 3D (abrir/cerrar hojas de la ventana sin abrir modal informativo)
+  if (h && h.id === 'ventana') {
+    if (!window3d.curtainState.open) {
+      window3d.toggleCurtains();
+      setTimeout(() => window3d.toggleWindow(), 550);
+    } else {
+      window3d.toggleWindow();
+    }
+    return;
+  }
+  // Manejar clic en puerta 3D (abrir/cerrar hoja de la puerta sin abrir modal informativo)
+  if (h && h.id === 'puerta') {
+    door3d.setDoorOpen(!door3d.doorState.open);
+    return;
+  }
+  // Solo el PC abre su pantalla informativa por ahora
+  if (!h || h.id !== 'pc') return;
+
   locked = true;
   activeHotspot = h;
   setHover(null);
   document.body.classList.add('zoomed');
-
-  // Si es "Sobre mí" (ventana): primero abre la ventana, hace zoom para apreciar el paisaje,
-  // y unos segundos después muestra el modal
-  if (h.id === 'ventana') {
-    clearTimeout(windowModalTimer);
-    let delay = 0;
-    if (!window3d.curtainState.open) {
-      window3d.toggleCurtains();
-      delay += 600;
-    }
-    windowModalTimer = setTimeout(() => {
-      window3d.setWindowOpen(true);
-      zoomTo(h, () => {
-        // Espera unos instantes con la ventana abierta antes de mostrar el modal
-        windowModalTimer = setTimeout(() => {
-          if (locked && activeHotspot === h) openModal(h);
-        }, 900);
-      });
-    }, delay);
-    return;
-  }
-
-  if (h.id === 'puerta') {
-    door3d.setDoorOpen(true);
-  }
 
   zoomTo(h, () => (h.fullscreen ? openScreen(h) : openModal(h)));
 }
@@ -560,7 +556,7 @@ window.addEventListener('pointermove', (e) => {
   }
   moved += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly);
   camera.rotation.y += (e.clientX - lx) * 0.004;
-  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + (e.clientY - ly) * 0.004, -0.75, 0.75);
+  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + (e.clientY - ly) * 0.004, -1.35, 1.35);
   yawTarget = camera.rotation.y;
   syncWallFromYaw(camera.rotation.y);
   lx = e.clientX; ly = e.clientY;
@@ -592,6 +588,7 @@ const v = new THREE.Vector3();
 function updatePins() {
   const show = !locked;
   for (const h of HOTSPOTS) {
+    if (!h.pin) continue;
     v.copy(h.center).project(camera);
     const coveredByCurtain = h.id === 'ventana' && !window3d.curtainState.open;
     const visible = show && !coveredByCurtain && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
@@ -640,6 +637,7 @@ renderer.setAnimationLoop(() => {
   updateFirstPersonMovement(dt);
   window3d.update(dt);
   bookcase3d.update(dt);
+  ceiling3d.update(dt);
   updatePins();
   renderer.render(scene, camera);
 });

@@ -6,8 +6,8 @@ import anime from 'animejs';
 
 const WALL_SIZE = 10;
 
-// Ruta opcional de imagen para el contenido interno del marco/pizarra de la pared trasera.
-export const CHALKBOARD_CONTENT_IMAGE = '';
+// Ruta de la imagen para el contenido interno del marco/pizarra de la pared trasera.
+export const CHALKBOARD_CONTENT_IMAGE = '/img/cuadros/pizarra.jpg';
 
 // Coordenadas UV del marco de la pizarra/cuadro en trasera.jpg (desplazado a la derecha para despejar el bolso)
 const BOARD_BOUNDS = {
@@ -289,16 +289,16 @@ export function createDoor3D(theme = 'light') {
   }
 
   // Fondo base de la hoja (paneles rebajados)
-  addLeafPartUV(0.064, 0.259, 0.313, 0.892, 0, leafDepth * 0.62, doorPanelMat);
+  addLeafPartUV(0.064, 0.259, 0.313, 0.893, 0, leafDepth * 0.62, doorPanelMat);
 
   // Montante vertical izquierdo y derecho (sobresalen en relieve respecto a los paneles centrales)
-  addLeafPartUV(0.064, 0.259, 0.102, 0.892, 0, leafDepth, doorStileMat);
-  addLeafPartUV(0.275, 0.259, 0.313, 0.892, 0, leafDepth, doorStileMat);
+  addLeafPartUV(0.064, 0.259, 0.102, 0.893, 0, leafDepth, doorStileMat);
+  addLeafPartUV(0.275, 0.259, 0.313, 0.893, 0, leafDepth, doorStileMat);
 
-  // Travesaño superior, travesaño central y travesaño inferior
+  // Travesaño superior, travesaño central y travesaño inferior (llega hasta el piso en v = 0.893 -> y = -5.0)
   addLeafPartUV(0.102, 0.259, 0.275, 0.296, 0, leafDepth, doorStileMat);
   addLeafPartUV(0.102, 0.604, 0.275, 0.642, 0, leafDepth, doorStileMat);
-  addLeafPartUV(0.102, 0.848, 0.275, 0.892, 0, leafDepth, doorStileMat);
+  addLeafPartUV(0.102, 0.848, 0.275, 0.893, 0, leafDepth, doorStileMat);
 
   // Función para construir los 2 paneles rebajados con moldura interior biselada y 4 tablones verticales acanalados
   const panelShadowUniforms = [];
@@ -560,8 +560,9 @@ export function createDoor3D(theme = 'light') {
     topBar.position.set(0, bh / 2 - borderW / 2, frameD / 2);
     boardGroup.add(topBar);
 
-    const botBar = new THREE.Mesh(new THREE.BoxGeometry(bw, borderW, frameD), boardWoodMat);
-    botBar.position.set(0, -bh / 2 + borderW / 2, frameD / 2);
+    const botBarD = frameD + 0.026; // el listón inferior sobresale ligeramente como repisa porta-tiza
+    const botBar = new THREE.Mesh(new THREE.BoxGeometry(bw, borderW, botBarD), boardWoodMat);
+    botBar.position.set(0, -bh / 2 + borderW / 2, botBarD / 2);
     boardGroup.add(botBar);
 
     const sideH = bh - borderW * 2;
@@ -622,8 +623,352 @@ export function createDoor3D(theme = 'light') {
     innerShadowMesh.position.set(0, 0, 0.016);
     boardGroup.add(innerShadowMesh);
 
+    // Tiza blanca en 3D con sombras apoyada sobre el borde inferior izquierdo del marco de madera
+    const chalkX = -innerW * 0.40;
+    const chalkY = -innerH / 2;
+    const chalkZ = frameD + 0.008;
+    const chalkLen = 0.24;
+    const chalkR = 0.017;
+
+    // 1. Sombra proyectada por la tiza sobre la madera del listón inferior (horizontal)
+    const chalkLedgeShadow = createDropShadow(chalkLen + 0.08, chalkR * 4.2, 0.022, 0.55);
+    chalkLedgeShadow.rotation.x = -Math.PI / 2;
+    chalkLedgeShadow.position.set(chalkX + 0.004, chalkY + 0.002, chalkZ);
+    boardGroup.add(chalkLedgeShadow);
+
+    // 2. Sombra suave proyectada por la tiza contra la base de la pizarra (vertical)
+    const chalkBoardShadow = createDropShadow(chalkLen + 0.09, chalkR * 4.0, 0.025, 0.52);
+    chalkBoardShadow.position.set(chalkX + 0.005, chalkY + chalkR * 0.65, 0.018);
+    boardGroup.add(chalkBoardShadow);
+
+    // 3. Sombra frontal sutil en el borde del listón bajo la tiza
+    const chalkFrontLipShadow = createDropShadow(chalkLen + 0.06, 0.045, 0.018, 0.35);
+    chalkFrontLipShadow.position.set(chalkX + 0.004, chalkY - 0.012, botBarD + 0.002);
+    boardGroup.add(chalkFrontLipShadow);
+
+    // 4. Cuerpo cilíndrico 3D de la tiza blanca con sombreado volumétrico propio
+    const chalkGroup = new THREE.Group();
+    chalkGroup.position.set(chalkX, chalkY + chalkR * 0.92, chalkZ);
+    chalkGroup.rotation.y = 0.07; // ligera inclinación natural sobre la repisa
+    boardGroup.add(chalkGroup);
+
+    const chalkWhiteMat = new THREE.MeshStandardMaterial({
+      color: 0xf7f5f0,
+      emissive: new THREE.Color(0xdcd9d0),
+      emissiveIntensity: 0.22,
+      roughness: 0.86,
+      metalness: 0.02,
+    });
+    const chalkTipMat = new THREE.MeshStandardMaterial({
+      color: 0xebe8e0,
+      emissive: new THREE.Color(0xcfcac0),
+      emissiveIntensity: 0.18,
+      roughness: 0.92,
+      metalness: 0.01,
+    });
+
+    // Barra principal de tiza (ligeramente cónica como las tizas clásicas)
+    const chalkBodyGeo = new THREE.CylinderGeometry(chalkR * 0.88, chalkR, chalkLen, 20);
+    chalkBodyGeo.rotateZ(Math.PI / 2);
+    const chalkBody = new THREE.Mesh(chalkBodyGeo, chalkWhiteMat);
+    chalkBody.castShadow = true;
+    chalkBody.receiveShadow = true;
+    chalkGroup.add(chalkBody);
+
+    // Punta desgastada redondeada en el extremo derecho de la tiza
+    const chalkTipGeo = new THREE.SphereGeometry(chalkR * 0.88, 16, 12);
+    chalkTipGeo.scale(1.25, 0.96, 0.96);
+    const chalkTip = new THREE.Mesh(chalkTipGeo, chalkTipMat);
+    chalkTip.position.x = chalkLen / 2;
+    chalkGroup.add(chalkTip);
+
+    // Tapa plana biselada en el extremo izquierdo
+    const chalkEndCap = new THREE.Mesh(new THREE.CylinderGeometry(chalkR * 0.96, chalkR, 0.006, 20), chalkTipMat);
+    chalkEndCap.rotation.z = Math.PI / 2;
+    chalkEndCap.position.x = -chalkLen / 2 - 0.002;
+    chalkGroup.add(chalkEndCap);
+
     boardGroup.traverse((child) => {
       if (child.isMesh) boardMeshes.push(child);
+    });
+  }
+
+  // ============================================================================
+  // --- 7. Perchero 3D de pared con 3 ganchos dobles (sin el bolso) ---
+  // ============================================================================
+  {
+    const RACK_BOUNDS = {
+      u0: 0.312,
+      v0: 0.368,
+      u1: 0.556,
+      v1: 0.408,
+    };
+    const rTL = uvWallToLocal(RACK_BOUNDS.u0, RACK_BOUNDS.v0);
+    const rBR = uvWallToLocal(RACK_BOUNDS.u1, RACK_BOUNDS.v1);
+    const rw = rBR.x - rTL.x; // ~2.44 unidades
+    const rh = rTL.y - rBR.y; // ~0.40 unidades
+    const rcx = (rTL.x + rBR.x) / 2;
+    const rcy = (rTL.y + rBR.y) / 2;
+
+    const rackGroup = new THREE.Group();
+    rackGroup.position.set(rcx, rcy, 0.004);
+    group.add(rackGroup);
+
+    // Sombra suave proyectada por la barra del perchero sobre la pared trasera
+    const rackWallShadow = createDropShadow(rw + 0.14, rh + 0.14, 0.055, 0.34);
+    rackWallShadow.position.set(0.010, -0.022, -0.002);
+    rackGroup.add(rackWallShadow);
+
+    // Textura de madera oscura / nogal espresso para la tabla del perchero
+    function createRackWoodTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 128;
+      const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, 0, c.height);
+      g.addColorStop(0, '#635146');
+      g.addColorStop(0.5, '#55453b');
+      g.addColorStop(1, '#43352d');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, c.width, c.height);
+
+      for (let i = 0; i < 65; i++) {
+        const y = (i / 65) * c.height;
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(28, 20, 15, 0.16)' : 'rgba(255, 235, 215, 0.04)';
+        ctx.lineWidth = 1 + (i % 2);
+        ctx.beginPath();
+        ctx.moveTo(0, y + Math.sin(i) * 2);
+        ctx.lineTo(c.width, y + Math.cos(i) * 2);
+        ctx.stroke();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    const rackWoodMat = new THREE.MeshStandardMaterial({
+      map: createRackWoodTexture(),
+      color: 0xffffff,
+      roughness: 0.52,
+      metalness: 0.08,
+    });
+    const rackTrimMat = new THREE.MeshStandardMaterial({
+      color: 0x3b2e26,
+      roughness: 0.58,
+      metalness: 0.10,
+    });
+    const hookIronMat = new THREE.MeshStandardMaterial({
+      color: 0x241f1d,
+      roughness: 0.34,
+      metalness: 0.78,
+    });
+
+    const railD = 0.034;
+    // Placa trasera biselada
+    const backPlate = new THREE.Mesh(new THREE.BoxGeometry(rw, rh, railD * 0.65), rackTrimMat);
+    backPlate.position.set(0, 0, (railD * 0.65) / 2);
+    rackGroup.add(backPlate);
+
+    // Frente biselado de la tabla del perchero
+    const frontPlate = new THREE.Mesh(new THREE.BoxGeometry(rw - 0.045, rh - 0.045, railD * 0.45), rackWoodMat);
+    frontPlate.position.set(0, 0, railD * 0.65 + (railD * 0.45) / 2);
+    rackGroup.add(frontPlate);
+
+    // 3 ganchos dobles en 3D (izquierdo, central y derecho)
+    const hookXPositions = [-rw * 0.39, 0.0, rw * 0.39];
+
+    for (const hx of hookXPositions) {
+      const hookUnit = new THREE.Group();
+      hookUnit.position.set(hx, 0, railD);
+      rackGroup.add(hookUnit);
+
+      // Sombra proyectada por la base del gancho sobre la madera y por el brazo superior sobre la pared
+      const baseShadow = createDropShadow(0.19, 0.30, 0.035, 0.42);
+      baseShadow.position.set(0.008, -0.012, 0.002);
+      hookUnit.add(baseShadow);
+
+      const upperArmWallShadow = createDropShadow(0.095, 0.42, 0.028, 0.32);
+      upperArmWallShadow.position.set(0.018, 0.30, -railD + 0.001);
+      hookUnit.add(upperArmWallShadow);
+
+      // Escudo / placa base ovalada vertical fijada a la tabla
+      const plateGeo = new THREE.CylinderGeometry(0.062, 0.062, 0.018, 24);
+      plateGeo.rotateX(Math.PI / 2);
+      plateGeo.scale(0.95, 1.75, 1.0);
+      const plateMesh = new THREE.Mesh(plateGeo, hookIronMat);
+      plateMesh.position.set(0, -0.01, 0.009);
+      hookUnit.add(plateMesh);
+
+      // Dos tornillos de fijación (arriba y abajo del escudo)
+      for (const sy of [0.068, -0.082]) {
+        const screw = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), hookIronMat);
+        screw.scale.set(1, 1, 0.55);
+        screw.position.set(0, sy, 0.018);
+        hookUnit.add(screw);
+      }
+
+      // Gancho inferior corto curvo
+      const lowerCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, -0.025, 0.014),
+        new THREE.Vector3(0, -0.052, 0.065),
+        new THREE.Vector3(0, -0.030, 0.105),
+        new THREE.Vector3(0, 0.012, 0.115),
+      ]);
+      const lowerTube = new THREE.Mesh(new THREE.TubeGeometry(lowerCurve, 16, 0.014, 12, false), hookIronMat);
+      hookUnit.add(lowerTube);
+
+      const lowerTip = new THREE.Mesh(new THREE.SphereGeometry(0.018, 12, 10), hookIronMat);
+      lowerTip.position.set(0, 0.015, 0.115);
+      hookUnit.add(lowerTip);
+
+      // Brazo superior largo del perchero (sobresale por encima de la tabla como en trasera.jpg)
+      const upperCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0.015, 0.016),
+        new THREE.Vector3(0, 0.12, 0.070),
+        new THREE.Vector3(0, 0.30, 0.102),
+        new THREE.Vector3(0, 0.49, 0.118),
+      ]);
+      const upperTube = new THREE.Mesh(new THREE.TubeGeometry(upperCurve, 22, 0.016, 14, false), hookIronMat);
+      hookUnit.add(upperTube);
+
+      // Punta superior redondeada/ensanchada característica del gancho
+      const upperTip = new THREE.Mesh(new THREE.SphereGeometry(0.026, 14, 12), hookIronMat);
+      upperTip.scale.set(0.82, 1.38, 1.12);
+      upperTip.position.set(0, 0.505, 0.120);
+      hookUnit.add(upperTip);
+    }
+  }
+
+  // ============================================================================
+  // --- 8. Interruptor de luz 3D al lado derecho de la puerta (controla la lámpara del techo) ---
+  // ============================================================================
+  const switchMeshes = [];
+  const switchHighlightMats = [];
+  const switchState = { on: true };
+  let rockerPivot = null;
+  let switchLedMat = null;
+
+  {
+    const swPos = uvWallToLocal(0.336, 0.598);
+    const swW = 0.24;
+    const swH = 0.35;
+    const swD = 0.020;
+
+    const switchGroup = new THREE.Group();
+    switchGroup.position.set(swPos.x, swPos.y, 0.003);
+    group.add(switchGroup);
+
+    // Sombra suave proyectada por la placa del interruptor sobre la pared
+    const swDropShadow = createDropShadow(swW + 0.07, swH + 0.07, 0.028, 0.28);
+    swDropShadow.position.set(0.005, -0.008, -0.002);
+    switchGroup.add(swDropShadow);
+
+    const switchPlateMat = new THREE.MeshStandardMaterial({
+      color: 0xf4f1ec,
+      emissive: new THREE.Color(0xffb85c),
+      emissiveIntensity: 0,
+      roughness: 0.36,
+      metalness: 0.05,
+    });
+    const switchTrimMat = new THREE.MeshStandardMaterial({
+      color: 0xd8d2c7,
+      emissive: new THREE.Color(0xffb85c),
+      emissiveIntensity: 0,
+      roughness: 0.44,
+      metalness: 0.06,
+    });
+    const switchRockerMat = new THREE.MeshStandardMaterial({
+      color: 0xebe6de,
+      emissive: new THREE.Color(0xffb85c),
+      emissiveIntensity: 0,
+      roughness: 0.32,
+      metalness: 0.06,
+    });
+    switchLedMat = new THREE.MeshBasicMaterial({
+      color: 0x2ecc71, // verde cuando la luz está encendida
+    });
+    switchHighlightMats.push(switchPlateMat, switchTrimMat, switchRockerMat);
+
+    // 1. Placa base biselada contra la pared
+    const backBevel = new THREE.Mesh(new THREE.BoxGeometry(swW, swH, swD * 0.55), switchTrimMat);
+    backBevel.position.set(0, 0, (swD * 0.55) / 2);
+    switchGroup.add(backBevel);
+
+    // 2. Placa frontal principal del interruptor
+    const facePlate = new THREE.Mesh(
+      new THREE.BoxGeometry(swW - 0.024, swH - 0.024, swD * 0.45),
+      switchPlateMat
+    );
+    facePlate.position.set(0, 0, swD * 0.55 + (swD * 0.45) / 2);
+    switchGroup.add(facePlate);
+
+    // 3. Marco interior rebajado oscuro alrededor de la tecla basculante
+    const rockW = swW * 0.48;
+    const rockH = swH * 0.54;
+    const recessGap = new THREE.Mesh(
+      new THREE.PlaneGeometry(rockW + 0.018, rockH + 0.018),
+      seamDarkMat
+    );
+    recessGap.position.set(0, 0, swD + 0.001);
+    switchGroup.add(recessGap);
+
+    // 4. Pivote 3D de la tecla basculante (se inclina al encender/apagar)
+    rockerPivot = new THREE.Group();
+    rockerPivot.position.set(0, 0, swD + 0.002);
+    rockerPivot.rotation.x = 0.14; // encendida por defecto
+    switchGroup.add(rockerPivot);
+
+    const rockerD = 0.018;
+    const rockerMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(rockW, rockH, rockerD),
+      switchRockerMat
+    );
+    rockerMesh.position.set(0, 0, rockerD / 2);
+    rockerPivot.add(rockerMesh);
+
+    // Pequeño indicador LED horizontal en la tecla del interruptor
+    const ledBar = new THREE.Mesh(
+      new THREE.BoxGeometry(rockW * 0.42, 0.010, 0.003),
+      switchLedMat
+    );
+    ledBar.position.set(0, -rockH * 0.26, rockerD + 0.001);
+    rockerPivot.add(ledBar);
+
+    switchGroup.traverse((child) => {
+      if (child.isMesh) switchMeshes.push(child);
+    });
+  }
+
+  function setSwitchHover(hovered) {
+    for (const mat of switchHighlightMats) {
+      anime.remove(mat);
+      anime({
+        targets: mat,
+        emissiveIntensity: hovered ? 0.24 : 0,
+        duration: 200,
+        easing: 'linear',
+      });
+    }
+  }
+
+  function setSwitchState(on, immediate = false) {
+    switchState.on = Boolean(on);
+    if (switchLedMat) {
+      // Verde cuando la luz está encendida y rojo cuando está apagada
+      switchLedMat.color.setHex(switchState.on ? 0x2ecc71 : 0xff3b30);
+    }
+    if (!rockerPivot) return;
+    const targetRotX = switchState.on ? 0.14 : -0.14;
+    anime.remove(rockerPivot.rotation);
+    if (immediate) {
+      rockerPivot.rotation.x = targetRotX;
+      return;
+    }
+    anime({
+      targets: rockerPivot.rotation,
+      x: targetRotX,
+      duration: 220,
+      easing: 'easeOutBack',
     });
   }
 
@@ -683,20 +1028,39 @@ export function createDoor3D(theme = 'light') {
     });
   }
 
-  function setTheme(newTheme) {
-    const isDark = newTheme === 'dark';
+  let currentTheme = theme;
+  let currentCurtainOpen = 1.0;
+  let currentCeilingPower = 1.0;
+
+  function syncDoorLighting() {
+    const isDark = currentTheme === 'dark';
+    const roomFactor = isDark
+      ? (0.24 + 0.32 * currentCurtainOpen + 0.44 * currentCeilingPower)
+      : (0.20 + 0.48 * currentCurtainOpen + 0.32 * currentCeilingPower);
+
     frameMat.color.setHex(0xf4f1ec);
     frameTrimMat.color.setHex(0xcfc9bf);
     doorStileMat.color.setHex(0xf4f1ec);
     doorPanelMat.color.setHex(0xe9e5de);
-    doorDirLight.intensity = isDark ? 0.45 : 0.75;
+    doorDirLight.intensity = (isDark ? 0.45 : 0.75) * roomFactor;
     doorDirLight.color.setHex(isDark ? 0xc8daff : 0xfff6ea);
     for (const u of panelShadowUniforms) {
       u.uOpacity.value = isDark ? 0.34 : 0.24;
     }
     if (boardCanvasMat) {
-      boardCanvasMat.color.setHex(isDark ? 0xc8c4be : 0xffffff);
+      boardCanvasMat.color.setHex(isDark ? 0xc8c4be : 0xffffff).multiplyScalar(roomFactor);
     }
+  }
+
+  function setRoomLighting({ curtainOpen, ceilingPower }) {
+    if (curtainOpen !== undefined) currentCurtainOpen = curtainOpen;
+    if (ceilingPower !== undefined) currentCeilingPower = ceilingPower;
+    syncDoorLighting();
+  }
+
+  function setTheme(newTheme) {
+    currentTheme = newTheme;
+    syncDoorLighting();
   }
   setTheme(theme);
 
@@ -704,11 +1068,15 @@ export function createDoor3D(theme = 'light') {
     group,
     doorMeshes,
     boardMeshes,
+    switchMeshes,
     doorState,
     setDoorHover,
     setBoardHover,
+    setSwitchHover,
+    setSwitchState,
     setBoardContent,
     setDoorOpen,
+    setRoomLighting,
     setTheme,
   };
 }

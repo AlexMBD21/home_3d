@@ -196,7 +196,7 @@ const glassShader = {
 };
 
 // ─── Crea la escena de la ventana ───
-export function createWindow3D(wallMesh, theme) {
+export function createWindow3D(wallMesh, theme, onCurtainChange = null) {
   const group = new THREE.Group();
   group.position.z = 0.02; // ligeramente delante de la pared
 
@@ -250,11 +250,10 @@ export function createWindow3D(wallMesh, theme) {
   };
   const viewTextures = {
     light: loadViewTex('/img/ventana.jpg'),
-    dark: loadViewTex('/img/dark/ventana.jpg'),
   };
 
   const viewMat = new THREE.MeshBasicMaterial({
-    map: viewTextures[theme] || viewTextures.light,
+    map: viewTextures.light,
   });
   const viewGeo = new THREE.PlaneGeometry(winW, winH);
   const viewMesh = new THREE.Mesh(viewGeo, viewMat);
@@ -620,6 +619,32 @@ export function createWindow3D(wallMesh, theme) {
     });
   }
 
+  let currentTheme = theme || 'light';
+  let currentRoomLightPower = 1.0;
+  let currentCurtainOpen = 1.0;
+
+  function syncWindowLighting() {
+    const isDark = currentTheme === 'dark';
+    const baseCol = curtainColors[currentTheme] || curtainColors.light;
+
+    // Al cerrar las cortinas o apagar la luz del techo, la tela interior y el marco también se oscurecen
+    const clothBright = isDark
+      ? (0.34 + 0.30 * currentCurtainOpen + 0.36 * currentRoomLightPower)
+      : (0.28 + 0.44 * currentCurtainOpen + 0.28 * currentRoomLightPower);
+
+    for (const c of curtains) {
+      c.uniforms.uColor.value.copy(baseCol).multiplyScalar(clothBright);
+    }
+
+    const lightFactor = isDark
+      ? (0.25 + 0.35 * currentCurtainOpen + 0.40 * currentRoomLightPower)
+      : (0.20 + 0.50 * currentCurtainOpen + 0.30 * currentRoomLightPower);
+
+    ambientLight.intensity = (isDark ? 0.38 : 0.68) * lightFactor;
+    dirLight.intensity = (isDark ? 0.55 : 0.95) * lightFactor;
+    dirLight.color.setHex(isDark ? 0xc8daff : 0xfff6ea);
+  }
+
   // Aplica el progreso (0 = abierta, 1 = cerrada) a posición, escala y pliegues
   function applyCurtainProgress(c) {
     const t = c.progress;
@@ -630,6 +655,14 @@ export function createWindow3D(wallMesh, theme) {
     c.mesh.position.x = c.edgeX - c.side * (currentW * 0.5);
     c.uniforms.uFold.value = t;
     c.uniforms.uScaleX.value = scaleX;
+
+    if (c.side === -1) {
+      currentCurtainOpen = 1.0 - t;
+      syncWindowLighting();
+      if (typeof onCurtainChange === 'function') {
+        onCurtainChange(currentCurtainOpen);
+      }
+    }
   }
 
   // Sincroniza la posición X de cada argolla y la sombra proyectada con su cortina
@@ -804,19 +837,17 @@ export function createWindow3D(wallMesh, theme) {
     syncRings();
   }
 
+  function setRoomLightPower(power) {
+    currentRoomLightPower = power;
+    syncWindowLighting();
+  }
+
   // ─── Cambiar tema ───
   function setTheme(newTheme) {
-    const isDark = newTheme === 'dark';
-    const col = curtainColors[newTheme] || curtainColors.light;
-    for (const c of curtains) {
-      c.uniforms.uColor.value.copy(col);
-    }
+    currentTheme = newTheme;
     viewMat.map = viewTextures[newTheme] || viewTextures.light;
     viewMat.needsUpdate = true;
-
-    ambientLight.intensity = isDark ? 0.38 : 0.68;
-    dirLight.intensity = isDark ? 0.55 : 0.95;
-    dirLight.color.setHex(isDark ? 0xc8daff : 0xfff6ea);
+    syncWindowLighting();
   }
   setTheme(theme);
 
@@ -827,6 +858,7 @@ export function createWindow3D(wallMesh, theme) {
     toggleCurtains,
     toggleWindow,
     setWindowOpen,
+    setRoomLightPower,
     update,
     setTheme,
     curtainState,

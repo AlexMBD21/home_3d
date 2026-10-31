@@ -18,14 +18,9 @@
       <h1>Alex Bello</h1>
       <p>Desarrollador de Software</p>
     </div>
-    <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar a modo noche" title="Alternar modo claro / modo noche">
-      <span class="icon-sun">☀️</span>
-      <span class="icon-moon">🌙</span>
-      <span class="theme-label">Modo noche</span>
-    </button>
   </header>
 
-  <main id="panels">
+  <main id="panels" hidden>
     <section class="panel" id="panel-frontal" data-wall="frontal">
       <h2>Zona de Desarrollo</h2>
       <p>Estación de trabajo principal. Toca las pantallas para explorar los <strong>Proyectos</strong> interactivos.</p>
@@ -46,10 +41,10 @@
   </main>
 
   <nav class="nav" aria-label="Navegación de paredes">
-    <button id="btn-izquierda" data-wall="izquierda">◀ Habilidades</button>
-    <button id="btn-frontal" data-wall="frontal" class="active">Proyectos</button>
-    <button id="btn-derecha" data-wall="derecha">Sobre mí ▶</button>
-    <button id="btn-trasera" data-wall="trasera">Contacto</button>
+    <button id="btn-izquierda" data-wall="izquierda"> izquierda</button>
+    <button id="btn-frontal" data-wall="frontal" class="active">frontal</button>
+    <button id="btn-derecha" data-wall="derecha">derecha </button>
+    <button id="btn-trasera" data-wall="trasera">trasera</button>
   </nav>
 
   <div id="pins" aria-hidden="false"></div>

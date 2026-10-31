@@ -278,12 +278,31 @@ export function createFurniture3D(loadingManager, theme = 'light', onMonitorsRea
     });
   }
 
-  function setTheme(newTheme) {
-    const isDark = newTheme === 'dark';
-    hemiLight.intensity = isDark ? 0.95 : 1.25;
-    frontDirLight.intensity = isDark ? 0.95 : 1.25;
+  let currentTheme = theme;
+  let currentCurtainOpen = 1.0;
+  let currentCeilingPower = 1.0;
+
+  function syncFurnitureLights() {
+    const isDark = currentTheme === 'dark';
+    const roomFactor = isDark
+      ? (0.20 + 0.34 * currentCurtainOpen + 0.46 * currentCeilingPower)
+      : (0.16 + 0.50 * currentCurtainOpen + 0.34 * currentCeilingPower);
+
+    hemiLight.intensity = (isDark ? 0.95 : 1.25) * roomFactor;
+    frontDirLight.intensity = (isDark ? 0.95 : 1.25) * roomFactor;
     monitorGlow.intensity = isDark ? 1.35 : 0.85;
     monitorGlow.color.setHex(isDark ? 0xffaa55 : 0xffcc88);
+  }
+
+  function setRoomLighting({ curtainOpen, ceilingPower }) {
+    if (curtainOpen !== undefined) currentCurtainOpen = curtainOpen;
+    if (ceilingPower !== undefined) currentCeilingPower = ceilingPower;
+    syncFurnitureLights();
+  }
+
+  function setTheme(newTheme) {
+    currentTheme = newTheme;
+    syncFurnitureLights();
   }
   setTheme(theme);
 
@@ -295,6 +314,7 @@ export function createFurniture3D(loadingManager, theme = 'light', onMonitorsRea
     chairMeshes,
     setMonitorHover,
     spinChair,
+    setRoomLighting,
     setTheme,
   };
 }

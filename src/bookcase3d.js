@@ -1370,23 +1370,43 @@ export function createBookcase3D(theme = 'light') {
     }
   }
 
-  function setTheme(newTheme) {
-    const isDark = newTheme === 'dark';
+  let currentTheme = theme;
+  let currentCurtainOpen = 1.0;
+  let currentCeilingPower = 1.0;
+
+  function syncBookcaseLighting() {
+    const isDark = currentTheme === 'dark';
+    const roomFactor = isDark
+      ? (0.24 + 0.32 * currentCurtainOpen + 0.44 * currentCeilingPower)
+      : (0.20 + 0.48 * currentCurtainOpen + 0.32 * currentCeilingPower);
+
     woodMainMat.color.setHex(isDark ? 0x996b42 : 0xb58354);
     woodEdgeMat.color.setHex(isDark ? 0xa8784c : 0xc49262);
     woodBackMat.color.setHex(isDark ? 0x754e2d : 0x91633b);
     frameOuterMat.color.setHex(isDark ? 0x1d1715 : 0x261f1c);
     passepartoutMat.color.setHex(isDark ? 0xd9d2c7 : 0xf1ece3);
+
     for (const cMat of frameCanvasMats) {
-      cMat.color.setHex(isDark ? 0xc8c4be : 0xffffff);
+      cMat.color.setHex(isDark ? 0xc8c4be : 0xffffff).multiplyScalar(roomFactor);
     }
     topLampLight.intensity = isDark ? 1.35 : 0.85;
     lampShadeMat.emissiveIntensity = isDark ? 1.15 : 0.65;
-    frontFillLight.intensity = isDark ? 0.38 : 0.55;
+    frontFillLight.intensity = (isDark ? 0.38 : 0.55) * roomFactor;
 
     for (const u of cavityUniforms) {
       u.uOpacity.value = isDark ? 0.82 : 0.65;
     }
+  }
+
+  function setRoomLighting({ curtainOpen, ceilingPower }) {
+    if (curtainOpen !== undefined) currentCurtainOpen = curtainOpen;
+    if (ceilingPower !== undefined) currentCeilingPower = ceilingPower;
+    syncBookcaseLighting();
+  }
+
+  function setTheme(newTheme) {
+    currentTheme = newTheme;
+    syncBookcaseLighting();
   }
   setTheme(theme);
 
@@ -1400,6 +1420,7 @@ export function createBookcase3D(theme = 'light') {
     setTurntableHover,
     toggleTurntable,
     setFramePaintings,
+    setRoomLighting,
     update,
     setTheme,
   };
