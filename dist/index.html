@@ -7,8 +7,8 @@
   <meta name="description" content="Portafolio interactivo de desarrollador: explora una habitación 3D para ver proyectos, habilidades, sobre mí y contacto." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/assets/index-CcUXl__V.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CtZSveI2.css">
+  <script type="module" crossorigin src="/assets/index-D0NolYEc.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DtNnMqgD.css">
 </head>
 <body>
   <div id="loader"><span>Cargando habitación…</span></div>
@@ -40,6 +40,16 @@
       <p>Toca la puerta o la pizarra para ver información de <strong>Contacto</strong> y redes sociales.</p>
     </section>
   </main>
+
+  <div id="mobile-joystick" class="joy" aria-label="Control para caminar por la habitación">
+    <div class="joy-ring">
+      <span class="joy-dir up">▲</span>
+      <span class="joy-dir down">▼</span>
+      <span class="joy-dir left">◀</span>
+      <span class="joy-dir right">▶</span>
+      <div class="joy-knob" id="joy-knob"></div>
+    </div>
+  </div>
 
   <nav class="nav" aria-label="Navegación de paredes">
     <button id="btn-izquierda" data-wall="izquierda"> izquierda</button>

@@ -12,7 +12,8 @@ import { setupProceduralWalls3D } from './walls3d.js';
 
 const SIZE = 10;
 const H = SIZE / 2;
-const BASE_FOV = 84;
+const getBaseFov = () => (window.innerWidth < 700 && window.innerWidth < window.innerHeight ? 92 : 84);
+const BASE_FOV = getBaseFov();
 const ZOOM_FOV = 50;
 const CAMERA_BACK = 2.3; // distancia hacia atrás desde el centro para ver todo el panorama
 
@@ -295,7 +296,9 @@ const wrapNear = (target, ref) => {
   return ref + d;
 };
 
-function moveCamera({ pos = [0, 0, 0], yaw, pitch = 0, fov = BASE_FOV, duration = 1200, easing = 'easeInOutQuad', complete }) {
+function moveCamera({ pos = [0, 0, 0], yaw, pitch = 0, fov = getBaseFov(), duration = 1200, easing = 'easeInOutQuad', complete }) {
+  yawVel = 0;
+  pitchVel = 0;
   anime.remove([camera.rotation, camera.position, camera]);
   anime({ targets: camera.position, x: pos[0], y: pos[1], z: pos[2], duration, easing });
   anime({
@@ -541,41 +544,115 @@ function syncWallFromYaw(yaw) {
   }
 }
 
-// Arrastrar para girar libremente 360° en primera persona; un clic sin arrastrar abre el hotspot
+// Arrastrar para girar libremente 360° (con inercia suave en pantallas táctiles y pellizco con 2 dedos para zoom)
 let dragging = false, moved = 0, lx = 0, ly = 0;
+let yawVel = 0, pitchVel = 0;
+let activePointerId = null;
+const touchPointers = new Map();
+let prevPinchDist = 0;
+
 canvas.addEventListener('pointerdown', (e) => {
   if (locked) return;
-  dragging = true; moved = 0; lx = e.clientX; ly = e.clientY;
+  touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
   anime.remove([camera.rotation, camera.position]);
+  yawVel = 0;
+  pitchVel = 0;
+
+  if (touchPointers.size === 1) {
+    dragging = true;
+    activePointerId = e.pointerId;
+    moved = 0;
+    lx = e.clientX;
+    ly = e.clientY;
+  } else if (touchPointers.size === 2) {
+    // Segundo dedo en pantalla: modo pellizco (pinch-to-zoom)
+    dragging = false;
+    const pts = Array.from(touchPointers.values());
+    prevPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
 });
+
 window.addEventListener('pointermove', (e) => {
   if (locked) return;
-  if (!dragging) {
-    if (e.target === canvas) setHover(pick(e.clientX, e.clientY));
+
+  if (touchPointers.has(e.pointerId)) {
+    touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
+  }
+
+  // Pellizco con 2 dedos en móvil para acercar/alejar la vista
+  if (touchPointers.size === 2) {
+    const pts = Array.from(touchPointers.values());
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    if (prevPinchDist > 0) {
+      const deltaDist = prevPinchDist - dist;
+      camera.fov = THREE.MathUtils.clamp(camera.fov + deltaDist * 0.12, 52, 98);
+      camera.updateProjectionMatrix();
+    }
+    prevPinchDist = dist;
     return;
   }
-  moved += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly);
-  camera.rotation.y += (e.clientX - lx) * 0.004;
-  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + (e.clientY - ly) * 0.004, -1.35, 1.35);
+
+  if (!dragging || e.pointerId !== activePointerId) {
+    if (e.pointerType !== 'touch' && e.target === canvas) {
+      setHover(pick(e.clientX, e.clientY));
+    }
+    return;
+  }
+
+  const dx = e.clientX - lx;
+  const dy = e.clientY - ly;
+  moved += Math.abs(dx) + Math.abs(dy);
+
+  // Mayor sensibilidad en pantallas táctiles de celular para girar cómodamente con un solo gesto del dedo
+  const sens = e.pointerType === 'touch' ? 0.0064 : 0.004;
+  const dYaw = dx * sens;
+  const dPitch = dy * sens;
+
+  camera.rotation.y += dYaw;
+  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + dPitch, -1.35, 1.35);
   yawTarget = camera.rotation.y;
+
+  // Guardar velocidad instantánea para inercia suave al soltar el dedo en móvil
+  if (e.pointerType === 'touch') {
+    yawVel = dYaw * 0.85 + yawVel * 0.15;
+    pitchVel = dPitch * 0.85 + pitchVel * 0.15;
+  }
+
   syncWallFromYaw(camera.rotation.y);
-  lx = e.clientX; ly = e.clientY;
+  lx = e.clientX;
+  ly = e.clientY;
 });
 
 // Rueda del ratón para acercar/alejar el panorama libremente cuando no hay modal abierto
 canvas.addEventListener('wheel', (e) => {
   if (locked) return;
-  camera.fov = THREE.MathUtils.clamp(camera.fov + e.deltaY * 0.03, 55, 96);
+  camera.fov = THREE.MathUtils.clamp(camera.fov + e.deltaY * 0.03, 52, 98);
   camera.updateProjectionMatrix();
 }, { passive: true });
-window.addEventListener('pointerup', (e) => {
-  if (!dragging) return;
-  dragging = false;
-  if (moved < 6) {
-    const h = pick(e.clientX, e.clientY);
-    if (h) { activate(h); return; }
+
+function endPointer(e, isCancel = false) {
+  touchPointers.delete(e.pointerId);
+  if (touchPointers.size < 2) prevPinchDist = 0;
+
+  if (e.pointerId === activePointerId) {
+    const wasDragging = dragging;
+    dragging = false;
+    activePointerId = null;
+
+    if (!isCancel && wasDragging) {
+      const tapLimit = e.pointerType === 'touch' ? 14 : 6;
+      if (moved < tapLimit) {
+        yawVel = 0;
+        pitchVel = 0;
+        const h = pick(e.clientX, e.clientY);
+        if (h) { activate(h); return; }
+      }
+    }
   }
-});
+}
+
+window.addEventListener('pointerup', (e) => endPointer(e, false));
+window.addEventListener('pointercancel', (e) => endPointer(e, true));
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -602,22 +679,105 @@ function updatePins() {
 const clock3d = new THREE.Clock();
 const WALK_SPEED = 3.8;
 
-function updateFirstPersonMovement(dt) {
-  if (locked || keysPressed.size === 0) return;
+// ---------- Joystick virtual táctil para caminar en móvil (360° analógico) ----------
+const joyEl = document.getElementById('mobile-joystick');
+const joyKnob = document.getElementById('joy-knob');
+const joyState = {
+  pointerId: null,
+  centerX: 0,
+  centerY: 0,
+  x: 0,  // -1 (izquierda) a +1 (derecha)
+  y: 0,  // -1 (atrás) a +1 (adelante)
+  kx: 0, // desplazamiento visual X en px
+  ky: 0, // desplazamiento visual Y en px
+  maxRadius: 23,
+};
 
-  let forward = 0;
-  let strafe = 0;
+if (joyEl && joyKnob) {
+  const renderKnob = () => {
+    joyKnob.style.transform = `translate3d(${joyState.kx}px, ${joyState.ky}px, 0)`;
+  };
+
+  const updateJoyFromEvent = (e) => {
+    const dx = e.clientX - joyState.centerX;
+    const dy = e.clientY - joyState.centerY;
+    const dist = Math.hypot(dx, dy);
+    const clampedDist = Math.min(dist, joyState.maxRadius);
+    const angle = Math.atan2(dy, dx);
+    joyState.kx = Math.cos(angle) * clampedDist;
+    joyState.ky = Math.sin(angle) * clampedDist;
+
+    renderKnob();
+    joyState.x = joyState.kx / joyState.maxRadius;
+    joyState.y = -joyState.ky / joyState.maxRadius; // hacia arriba en pantalla = avanzar (+1)
+  };
+
+  const resetJoy = () => {
+    if (joyState.pointerId === null && joyState.kx === 0 && joyState.ky === 0) return;
+    joyState.pointerId = null;
+    joyState.x = 0;
+    joyState.y = 0;
+    joyEl.classList.remove('active');
+    anime.remove(joyState);
+    anime({
+      targets: joyState,
+      kx: 0,
+      ky: 0,
+      duration: 220,
+      easing: 'easeOutBack',
+      update: renderKnob,
+    });
+  };
+
+  joyEl.addEventListener('pointerdown', (e) => {
+    if (locked || joyState.pointerId !== null) return;
+    e.stopPropagation();
+    anime.remove([joyState, camera.position]);
+    const rect = joyEl.getBoundingClientRect();
+    joyState.pointerId = e.pointerId;
+    joyState.centerX = rect.left + rect.width / 2;
+    joyState.centerY = rect.top + rect.height / 2;
+    joyEl.classList.add('active');
+    try { joyEl.setPointerCapture(e.pointerId); } catch (_) {}
+    updateJoyFromEvent(e);
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== joyState.pointerId) return;
+    updateJoyFromEvent(e);
+  });
+
+  window.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== joyState.pointerId) return;
+    resetJoy();
+  });
+
+  window.addEventListener('pointercancel', (e) => {
+    if (e.pointerId !== joyState.pointerId) return;
+    resetJoy();
+  });
+
+  window.addEventListener('blur', resetJoy);
+}
+
+function updateFirstPersonMovement(dt) {
+  if (locked) return;
+
+  let forward = joyState.y;
+  let strafe = joyState.x;
   if (keysPressed.has('KeyW') || keysPressed.has('ArrowUp')) forward += 1;
   if (keysPressed.has('KeyS') || keysPressed.has('ArrowDown')) forward -= 1;
   if (keysPressed.has('KeyD') || keysPressed.has('ArrowRight')) strafe += 1;
   if (keysPressed.has('KeyA') || keysPressed.has('ArrowLeft')) strafe -= 1;
 
-  if (forward === 0 && strafe === 0) return;
+  if (Math.abs(forward) < 0.01 && Math.abs(strafe) < 0.01) return;
 
   anime.remove(camera.position);
   const len = Math.hypot(forward, strafe);
-  forward /= len;
-  strafe /= len;
+  if (len > 1) {
+    forward /= len;
+    strafe /= len;
+  }
 
   const yaw = camera.rotation.y;
   const sinY = Math.sin(yaw);
@@ -632,9 +792,24 @@ function updateFirstPersonMovement(dt) {
   camera.position.z = THREE.MathUtils.clamp(camera.position.z + dz, -1.65, 3.85);
 }
 
+function updateTouchInertia(dt) {
+  if (locked || dragging || touchPointers.size > 0) return;
+  if (Math.abs(yawVel) < 0.00004 && Math.abs(pitchVel) < 0.00004) return;
+
+  camera.rotation.y += yawVel;
+  camera.rotation.x = THREE.MathUtils.clamp(camera.rotation.x + pitchVel, -1.35, 1.35);
+  yawTarget = camera.rotation.y;
+  syncWallFromYaw(camera.rotation.y);
+
+  const damping = Math.exp(-dt * 8.5);
+  yawVel *= damping;
+  pitchVel *= damping;
+}
+
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock3d.getDelta(), 0.05);
   updateFirstPersonMovement(dt);
+  updateTouchInertia(dt);
   window3d.update(dt);
   bookcase3d.update(dt);
   ceiling3d.update(dt);
