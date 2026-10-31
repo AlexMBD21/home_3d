@@ -3,11 +3,12 @@
 
 import * as THREE from 'three';
 import anime from 'animejs';
+import { getStorageUrl } from './supabase.js';
 
 const WALL_SIZE = 10;
 
-// Ruta de la imagen para el contenido interno del marco/pizarra de la pared trasera.
-export const CHALKBOARD_CONTENT_IMAGE = '/img/cuadros/pizarra.jpg';
+// Ruta de la imagen para el contenido interno del marco/pizarra de la pared trasera (desde Supabase Storage)
+export const CHALKBOARD_CONTENT_IMAGE = getStorageUrl('cuadros/pizarra.jpg');
 
 // Coordenadas UV del marco de la pizarra/cuadro en trasera.jpg (desplazado a la derecha para despejar el bolso)
 const BOARD_BOUNDS = {
@@ -981,7 +982,8 @@ export function createDoor3D(theme = 'light') {
       return;
     }
     if (typeof source === 'string') {
-      texLoader.load(encodeURI(source), (tex) => {
+      const url = getStorageUrl(source);
+      texLoader.load(encodeURI(url), (tex) => {
         tex.colorSpace = THREE.SRGBColorSpace;
         boardCanvasMat.map = tex;
         boardCanvasMat.needsUpdate = true;

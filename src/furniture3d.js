@@ -4,9 +4,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import anime from 'animejs';
+import { getStorageUrl } from './supabase.js';
 
-const DESK_URL = '/img/3d/escritorio.glb';
-const CHAIR_URL = '/img/3d/sillagamer.glb';
+const LOCAL_DESK_URL = '/img/3d/escritorio.glb';
+const DESK_URL = getStorageUrl('3d/escritorio.glb');
+
+const LOCAL_CHAIR_URL = '/img/3d/sillagamer.glb';
+const CHAIR_URL = getStorageUrl('3d/sillagamer.glb');
 
 // Sombra suave de contacto en el piso
 const floorShadowShader = {
@@ -118,133 +122,183 @@ export function createFurniture3D(loadingManager, theme = 'light', onMonitorsRea
   const screenMaterials = [];
   const chairMeshes = [];
 
-  // Cargar escritorio.glb
-  gltfLoader.load(encodeURI(DESK_URL), (gltf) => {
-    const model = gltf.scene;
+  // Cargar escritorio.glb desde Supabase (con respaldo local)
+  const loadDesk = (url, isFallback = false) => {
+    gltfLoader.load(
+      encodeURI(url),
+      (gltf) => {
+        const model = gltf.scene;
 
-    // Ampliar ligeramente el soporte de monitores dobles para que destaquen en proporción al escritorio
-    model.traverse((node) => {
-      if (node.name === 'Dual Monitors on sit-stand arm') {
-        const tabletopY = 0.942;
-        const boost = 1.28;
-        node.scale.multiplyScalar(boost);
-        node.position.y = tabletopY + (node.position.y - tabletopY) * boost;
-      }
-    });
-
-    const monitorPanelNodes = [];
-
-    model.traverse((child) => {
-      if (child.name && (child.name.includes('Dupli|22') || child.name.includes('Dupli|23'))) {
-        monitorPanelNodes.push(child);
-      }
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-
-        if (child.material) {
-          const mat = child.material;
-          if (mat.map) {
-            mat.map.colorSpace = THREE.SRGBColorSpace;
+        // Ampliar ligeramente el soporte de monitores dobles para que destaquen en proporción al escritorio
+        model.traverse((node) => {
+          if (node.name === 'Dual Monitors on sit-stand arm') {
+            const tabletopY = 0.942;
+            const boost = 1.28;
+            node.scale.multiplyScalar(boost);
+            node.position.y = tabletopY + (node.position.y - tabletopY) * boost;
           }
-          if (mat.name === 'BlackWood') {
-            mat.color.setHex(0x8a6042);
-            mat.roughness = 0.46;
-            mat.metalness = 0.08;
-          } else if (mat.name === 'BlackCoatSteel' || mat.name === 'BlackPlastic') {
-            mat.color.setHex(0x2a2d34);
-            mat.roughness = 0.4;
-            mat.metalness = 0.35;
-          } else if (mat.name === 'mat22.010') {
-            // Material de la superficie de las pantallas de los 2 monitores
-            const screenMat = mat.clone();
-            screenMat.color.setHex(0x2b303c);
-            screenMat.emissive = new THREE.Color(0xffb85c);
-            screenMat.emissiveIntensity = 0.06;
-            screenMat.roughness = 0.25;
-            screenMat.metalness = 0.1;
-            child.material = screenMat;
-            screenMaterials.push(screenMat);
-          } else {
-            mat.metalness = Math.min(mat.metalness ?? 0.1, 0.25);
-            mat.roughness = Math.max(mat.roughness ?? 0.5, 0.35);
+        });
+
+        // 1ª pasada: recopilar nodos de los paneles de monitor y sus meshes hijas
+        const monitorPanelNodes = [];
+        const screenMeshIds = new Set();
+
+        model.traverse((child) => {
+          if (child.name && (child.name.includes('Dupli|22') || child.name.includes('Dupli|23'))) {
+            monitorPanelNodes.push(child);
+            child.traverse((m) => {
+              if (m.isMesh) screenMeshIds.add(m.uuid);
+            });
           }
-          child.material.needsUpdate = true;
+        });
+
+        // 2ª pasada: aplicar materiales distinguiendo pantallas reales del soporte/brazo
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+
+            if (child.material) {
+              const mat = child.material;
+              if (mat.map) {
+                mat.map.colorSpace = THREE.SRGBColorSpace;
+              }
+              if (mat.name === 'BlackWood') {
+                mat.color.setHex(0x8a6042);
+                mat.roughness = 0.46;
+                mat.metalness = 0.08;
+              } else if (mat.name === 'BlackCoatSteel' || mat.name === 'BlackPlastic') {
+                mat.color.setHex(0x2a2d34);
+                mat.roughness = 0.4;
+                mat.metalness = 0.35;
+              } else if (mat.name === 'mat22.010') {
+                if (screenMeshIds.has(child.uuid)) {
+                  // Superficie real de las pantallas de los 2 monitores
+                  const screenMat = mat.clone();
+                  screenMat.color.setHex(0x2b303c);
+                  screenMat.emissive = new THREE.Color(0xffb85c);
+                  screenMat.emissiveIntensity = 0.06;
+                  screenMat.roughness = 0.25;
+                  screenMat.metalness = 0.1;
+                  child.material = screenMat;
+                  screenMaterials.push(screenMat);
+                } else {
+                  // Soporte, brazo, bisel – negro mate sin brillo emisivo
+                  const bezelMat = mat.clone();
+                  bezelMat.color.setHex(0x14161b);
+                  bezelMat.emissive = new THREE.Color(0x000000);
+                  bezelMat.emissiveIntensity = 0;
+                  bezelMat.roughness = 0.6;
+                  bezelMat.metalness = 0.15;
+                  child.material = bezelMat;
+                }
+              } else {
+                mat.metalness = Math.min(mat.metalness ?? 0.1, 0.25);
+                mat.roughness = Math.max(mat.roughness ?? 0.5, 0.35);
+              }
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+
+        // Escala amplia que cubre el ancho de la zona de trabajo desde el suelo 3D
+        const normalizedDesk = normalizeAndScaleModel(model, {
+          x: 6.65,
+          y: 4.88,
+          z: 2.55,
+        });
+        deskContainer.add(normalizedDesk);
+
+        // Calcular la caja 3D exacta en coordenadas globales de las 2 pantallas de los monitores
+        group.updateWorldMatrix(true, true);
+        const monitorBox = new THREE.Box3();
+        for (const panel of monitorPanelNodes) {
+          panel.traverse((m) => {
+            if (m.isMesh) {
+              monitorMeshes.push(m);
+              monitorBox.expandByObject(m);
+            }
+          });
+        }
+
+        if (!monitorBox.isEmpty() && onMonitorsReady) {
+          const center = monitorBox.getCenter(new THREE.Vector3());
+          const size = monitorBox.getSize(new THREE.Vector3());
+          onMonitorsReady({ box: monitorBox, center, size });
+        }
+      },
+      undefined,
+      (err) => {
+        if (!isFallback && url !== LOCAL_DESK_URL) {
+          console.warn('Cargando escritorio.glb local como respaldo:', err);
+          loadDesk(LOCAL_DESK_URL, true);
+        } else {
+          console.warn('No se pudo cargar escritorio.glb:', err);
         }
       }
-    });
+    );
+  };
+  loadDesk(DESK_URL);
 
-    // Escala amplia que cubre el ancho de la zona de trabajo desde el suelo 3D
-    const normalizedDesk = normalizeAndScaleModel(model, {
-      x: 6.65,
-      y: 4.88,
-      z: 2.55,
-    });
-    deskContainer.add(normalizedDesk);
+  // Cargar sillagamer.glb desde Supabase (con respaldo local)
+  const loadChair = (url, isFallback = false) => {
+    gltfLoader.load(
+      encodeURI(url),
+      (gltf) => {
+        const model = gltf.scene;
 
-    // Calcular la caja 3D exacta en coordenadas globales de las 2 pantallas de los monitores
-    group.updateWorldMatrix(true, true);
-    const monitorBox = new THREE.Box3();
-    for (const panel of monitorPanelNodes) {
-      panel.traverse((m) => {
-        if (m.isMesh) {
-          monitorMeshes.push(m);
-          monitorBox.expandByObject(m);
-        }
-      });
-    }
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            chairMeshes.push(child);
 
-    if (!monitorBox.isEmpty() && onMonitorsReady) {
-      const center = monitorBox.getCenter(new THREE.Vector3());
-      const size = monitorBox.getSize(new THREE.Vector3());
-      onMonitorsReady({ box: monitorBox, center, size });
-    }
-  });
-
-  // Cargar sillagamer.glb
-  gltfLoader.load(encodeURI(CHAIR_URL), (gltf) => {
-    const model = gltf.scene;
-
-    model.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        chairMeshes.push(child);
-
-        if (child.material) {
-          const mat = child.material;
-          if (mat.map) {
-            mat.map.colorSpace = THREE.SRGBColorSpace;
+            if (child.material) {
+              const mat = child.material;
+              if (mat.map) {
+                mat.map.colorSpace = THREE.SRGBColorSpace;
+              }
+              if (mat.name === 'Executive__2') {
+                mat.color.setHex(0x423832);
+                mat.roughness = 0.42;
+                mat.metalness = 0.12;
+              } else if (mat.name === 'Executive__1') {
+                mat.color.setHex(0x26282e);
+                mat.roughness = 0.38;
+                mat.metalness = 0.28;
+              } else if (mat.name === 'Executive') {
+                mat.color.setHex(0xa68564);
+                mat.roughness = 0.45;
+                mat.metalness = 0.15;
+              } else {
+                mat.metalness = Math.min(mat.metalness ?? 0.15, 0.3);
+                mat.roughness = Math.max(mat.roughness ?? 0.45, 0.35);
+              }
+              mat.needsUpdate = true;
+            }
           }
-          if (mat.name === 'Executive__2') {
-            mat.color.setHex(0x423832);
-            mat.roughness = 0.42;
-            mat.metalness = 0.12;
-          } else if (mat.name === 'Executive__1') {
-            mat.color.setHex(0x26282e);
-            mat.roughness = 0.38;
-            mat.metalness = 0.28;
-          } else if (mat.name === 'Executive') {
-            mat.color.setHex(0xa68564);
-            mat.roughness = 0.45;
-            mat.metalness = 0.15;
-          } else {
-            mat.metalness = Math.min(mat.metalness ?? 0.15, 0.3);
-            mat.roughness = Math.max(mat.roughness ?? 0.45, 0.35);
-          }
-          mat.needsUpdate = true;
+        });
+
+        // Silla con proporción real respecto al escritorio apoyada en el suelo 3D
+        const normalizedChair = normalizeAndScaleModel(model, {
+          x: 2.1,
+          y: 3.92,
+          z: 2.1,
+        });
+        chairContainer.add(normalizedChair);
+      },
+      undefined,
+      (err) => {
+        if (!isFallback && url !== LOCAL_CHAIR_URL) {
+          console.warn('Cargando sillagamer.glb local como respaldo:', err);
+          loadChair(LOCAL_CHAIR_URL, true);
+        } else {
+          console.warn('No se pudo cargar sillagamer.glb:', err);
         }
       }
-    });
-
-    // Silla con proporción real respecto al escritorio apoyada en el suelo 3D
-    const normalizedChair = normalizeAndScaleModel(model, {
-      x: 2.1,
-      y: 3.92,
-      z: 2.1,
-    });
-    chairContainer.add(normalizedChair);
-  });
+    );
+  };
+  loadChair(CHAIR_URL);
 
   // Resaltar directamente las 2 pantallas 3D al pasar el cursor
   function setMonitorHover(hovered) {

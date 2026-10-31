@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import anime from 'animejs';
+import { getStorageUrl } from './supabase.js';
 
 const WALL_SIZE = 10;
 
@@ -241,15 +242,15 @@ export function createWindow3D(wallMesh, theme, onCurtainChange = null) {
   shadowMesh.renderOrder = 0;
   group.add(shadowMesh);
 
-  // --- 1b. Imagen de paisaje dentro de la ventana (modo día / modo noche) ---
+  // --- 1b. Imagen de paisaje dentro de la ventana cargada desde Supabase Storage ---
   const texLoader = new THREE.TextureLoader();
   const loadViewTex = (path) => {
-    const t = texLoader.load(path);
+    const t = texLoader.load(getStorageUrl(path));
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
   };
   const viewTextures = {
-    light: loadViewTex('/img/ventana.jpg'),
+    light: loadViewTex('ventana.jpg'),
   };
 
   const viewMat = new THREE.MeshBasicMaterial({

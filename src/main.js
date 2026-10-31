@@ -9,6 +9,7 @@ import { createBookcase3D } from './bookcase3d.js';
 import { createDoor3D } from './door3d.js';
 import { createCeilingLamp3D } from './ceiling3d.js';
 import { setupProceduralWalls3D } from './walls3d.js';
+import { getStorageUrl } from './supabase.js';
 
 const SIZE = 10;
 const H = SIZE / 2;
@@ -29,7 +30,29 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // ---------- Habitación & Texturas (Modo Claro / Modo Oscuro) ----------
-const manager = new THREE.LoadingManager(() => document.getElementById('loader').classList.add('done'));
+const manager = new THREE.LoadingManager(
+  () => {
+    // Completado: llenar barra al 100% y ocultar loader
+    const bar = document.getElementById('loader-bar');
+    const status = document.getElementById('loader-status');
+    if (bar) bar.style.width = '100%';
+    if (status) status.textContent = '¡Listo!';
+    setTimeout(() => document.getElementById('loader').classList.add('done'), 400);
+  },
+  (_url, loaded, total) => {
+    // Progreso: actualizar barra y mensaje
+    const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+    const bar = document.getElementById('loader-bar');
+    const status = document.getElementById('loader-status');
+    if (bar) bar.style.width = `${pct}%`;
+    if (status) {
+      if (pct < 30) status.textContent = 'Cargando texturas…';
+      else if (pct < 60) status.textContent = 'Construyendo habitación…';
+      else if (pct < 85) status.textContent = 'Colocando muebles…';
+      else status.textContent = 'Últimos detalles…';
+    }
+  }
+);
 const loader = new THREE.TextureLoader(manager);
 
 const loadTexture = (path) => {
@@ -39,8 +62,8 @@ const loadTexture = (path) => {
   return t;
 };
 
-// Solo se precarga la textura del piso; las 4 paredes y el techo se generan proceduralmente en 3D
-const floorTexture = loadTexture('/img/piso.jpg');
+// Solo se precarga la textura del piso desde Supabase Storage; las 4 paredes y el techo se generan proceduralmente en 3D
+const floorTexture = loadTexture(getStorageUrl('piso.jpg'));
 const currentTheme = 'light';
 localStorage.removeItem('theme');
 document.body.classList.remove('dark-theme');
@@ -182,18 +205,6 @@ for (const h of HOTSPOTS) {
     h.is3DBoard = true; // resaltar directamente el marco de madera 3D de la pizarra
   } else {
     hotspotMeshes.push(mesh);
-  }
-
-  // Solo crear el punto informativo (pin) para el PC por ahora
-  if (h.id === 'pc') {
-    const pin = document.createElement('button');
-    pin.className = 'pin';
-    pin.id = `pin-${h.id}`;
-    pin.setAttribute('aria-label', h.label);
-    pin.innerHTML = `<i></i><span>${h.label}</span>`;
-    pin.addEventListener('click', (e) => { e.stopPropagation(); activate(h); });
-    pinsEl.appendChild(pin);
-    h.pin = pin;
   }
 }
 
@@ -435,23 +446,24 @@ function projectedRect(h) {
 }
 
 function openScreen(h) {
-  clock.textContent = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  if (clock) clock.textContent = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
   screenEl.style.clipPath = projectedRect(h);
   screenEl.classList.add('open');
   screenEl.setAttribute('aria-hidden', 'false');
   anime.remove(screenEl);
-  screenUI.showGrid();
+  if (screenUI && screenUI.open) screenUI.open();
   anime({
-    targets: screenEl.querySelector('.cf-stage'),
-    opacity: [0, 1], scale: [0.85, 1], translateY: [30, 0],
-    delay: 900, duration: 900, easing: 'easeOutCubic',
+    targets: screenEl.querySelector('.vsc-workspace'),
+    opacity: [0, 1], scale: [0.96, 1],
+    delay: 350, duration: 600, easing: 'easeOutCubic',
   });
-  anime({ targets: screenEl, clipPath: 'inset(0px 0px 0px 0px round 0px)', duration: 900, easing: 'easeInOutCubic' });
+  anime({ targets: screenEl, clipPath: 'inset(0px 0px 0px 0px round 0px)', duration: 750, easing: 'easeInOutCubic' });
   anime({
-    targets: screenEl.querySelectorAll('.scr-titlebar, .scr-view, .scr-status'),
-    opacity: [0, 1], delay: anime.stagger(90, { start: 500 }), duration: 500, easing: 'easeOutQuad',
+    targets: screenEl.querySelectorAll('.vsc-titlebar, .vsc-workspace, .vsc-statusbar'),
+    opacity: [0, 1], delay: anime.stagger(60, { start: 250 }), duration: 400, easing: 'easeOutQuad',
   });
-  screenEl.querySelector('.scr-close').focus();
+  const closeBtn = screenEl.querySelector('[data-close]');
+  if (closeBtn) closeBtn.focus();
 }
 
 function closeScreen(h, done) {

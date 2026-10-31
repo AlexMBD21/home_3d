@@ -10,20 +10,36 @@
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
-  <div id="loader"><span>Cargando habitación…</span></div>
+  <div id="loader">
+    <div class="loader-content">
+      <div class="loader-icon">
+        <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Habitación isométrica simplificada -->
+          <path d="M40 12 L68 28 L68 58 L40 74 L12 58 L12 28 Z" stroke="currentColor" stroke-width="1.5" fill="none" class="loader-room"/>
+          <path d="M40 12 L40 74" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+          <path d="M12 28 L68 28" stroke="currentColor" stroke-width="1" opacity="0.3"/>
+          <!-- Monitor -->
+          <rect x="30" y="36" width="20" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none" class="loader-monitor"/>
+          <line x1="40" y1="49" x2="40" y2="54" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="34" y1="54" x2="46" y2="54" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h2 class="loader-name">Alex Bello</h2>
+      <p class="loader-role">Desarrollador de Software</p>
+      <div class="loader-bar-track">
+        <div class="loader-bar-fill" id="loader-bar"></div>
+      </div>
+      <p class="loader-status" id="loader-status">Preparando habitación…</p>
+    </div>
+  </div>
   <canvas id="scene"></canvas>
 
-  <header class="top-bar">
-    <div class="brand">
-      <h1>Alex Bello</h1>
-      <p>Desarrollador de Software</p>
-    </div>
-  </header>
+
 
   <main id="panels" hidden>
     <section class="panel" id="panel-frontal" data-wall="frontal">
       <h2>Zona de Desarrollo</h2>
-      <p>Estación de trabajo principal. Toca las pantallas para explorar los <strong>Proyectos</strong> interactivos.</p>
+      <p>Estación de trabajo principal. Toca el monitor para abrir el editor <strong>Visual Studio Code</strong>.</p>
     </section>
     <section class="panel" id="panel-izquierda" data-wall="izquierda">
       <h2>Librero & Estudio</h2>
@@ -57,6 +73,7 @@
     <button id="btn-trasera" data-wall="trasera">trasera</button>
   </nav>
 
+  
   <div id="pins" aria-hidden="false"></div>
 
   <div id="modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modal-body">
@@ -67,29 +84,198 @@
   </div>
 
 
-  <div id="screen" class="screen" aria-hidden="true" role="dialog" aria-label="Mis proyectos">
-    <div class="scr-titlebar">
-      <button class="scr-close" id="screen-close" data-close aria-label="Cerrar ventana" title="Cerrar (Esc)"></button>
-      <span class="scr-dot y"></span><span class="scr-dot g"></span>
-      <span class="scr-title">Mis proyectos</span>
-    </div>
-    <div class="scr-view" id="screen-view">
-      <div class="scr-list">
-        <header class="scr-head">
-          <h2>Mis proyectos</h2>
-          <span id="screen-count">Haz clic en la tarjeta central para abrirla</span>
-        </header>
-        <div class="cf-stage"><div id="screen-carousel" class="cf-track"></div></div>
-        <div id="screen-caption" class="cf-caption"></div>
-        <div class="cf-nav">
-          <button id="screen-prev" class="cf-arrow" aria-label="Anterior">‹</button>
-          <div id="screen-dots" class="cf-dots"></div>
-          <button id="screen-next" class="cf-arrow" aria-label="Siguiente">›</button>
+  <div id="screen" class="screen vscode-window" aria-hidden="true" role="dialog" aria-label="Visual Studio Code">
+    <!-- Barra de título estilo VS Code -->
+    <div class="vsc-titlebar">
+      <div class="vsc-titlebar-left">
+        <div class="vsc-controls" title="Cerrar pantalla (botón rojo o Esc)">
+          <button class="vsc-ctrl close" id="screen-close" data-close aria-label="Cerrar ventana" title="Cerrar pantalla (Esc)"></button>
+          <span class="vsc-ctrl minimize" title="Minimizar"></span>
+          <span class="vsc-ctrl maximize" title="Maximizar"></span>
+        </div>
+        <nav class="vsc-menu" aria-label="Menú superior">
+          <span>File</span>
+          <span>Edit</span>
+          <span>Selection</span>
+          <span>View</span>
+          <span>Help</span>
+        </nav>
+      </div>
+
+      <div class="vsc-titlebar-center">
+        <div class="vsc-title">
+          <svg class="vsc-title-logo" viewBox="0 0 24 24" width="14" height="14">
+            <path fill="#007acc" d="M17.58 2.05L7.33 11.53 3.1 8.28.98 9.94l4.24 3.73-4.24 3.74 2.12 1.66 4.23-3.25 10.25 9.48 4.42-2.12V4.17L17.58 2.05zm-.58 14.52l-5.69-4.89 5.69-4.9v9.79z"/>
+          </svg>
+          <span class="vsc-title-text">portfolio — Alex Bello — Visual Studio Code</span>
         </div>
       </div>
-      <div id="screen-detail" class="scr-detail"></div>
+
+      <div class="vsc-titlebar-right"></div>
     </div>
-    <div class="scr-status"><span id="screen-clock"></span><span class="scr-exit">Esc para salir</span></div>
+
+    <!-- Espacio de trabajo principal -->
+    <div class="vsc-workspace">
+      <!-- Barra lateral de actividades (iconos) -->
+      <aside class="vsc-activitybar" aria-label="Barra de actividades">
+        <div class="vsc-act-top">
+          <button class="vsc-act-btn active" id="vsc-act-explorer" title="Explorador (Archivos)" aria-label="Explorador">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3v4H5V6h7zm-7 6h7v4H5v-4zm9 4V6h5v10h-5z"/></svg>
+          </button>
+          <button class="vsc-act-btn" id="vsc-act-search" title="Buscar" aria-label="Buscar">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          </button>
+          <button class="vsc-act-btn" id="vsc-act-git" title="Control de código fuente" aria-label="Git">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19 13a3 3 0 0 0-2.82 2H11a3 3 0 0 0-2.82-2A3 3 0 0 0 7 11.18V8.82A3 3 0 1 0 5 6v12a3 3 0 1 0 4-2.82V14.8A3.01 3.01 0 0 0 11 17h5.18A3 3 0 1 0 19 13z"/></svg>
+            <span class="vsc-badge">1</span>
+          </button>
+          <button class="vsc-act-btn" id="vsc-act-run" title="Ejecutar y depurar" aria-label="Debug">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          </button>
+        </div>
+        <div class="vsc-act-bottom">
+          <button class="vsc-act-btn" title="Perfil" aria-label="Perfil">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+          </button>
+          <button class="vsc-act-btn" title="Configuración" aria-label="Configuración">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.485.485 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Panel lateral de archivos (Explorador) -->
+      <section class="vsc-sidebar" id="vsc-sidebar">
+        <div class="vsc-side-header">
+          <span>EXPLORER</span>
+          <button class="vsc-side-toggle" id="vsc-toggle-btn" aria-label="Minimizar panel">‹</button>
+        </div>
+        <div class="vsc-filetree">
+          <div class="vsc-tree-section open">
+            <div class="vsc-sec-title">
+              <span class="vsc-arrow">▾</span>
+              <strong>PORTFOLIO</strong>
+            </div>
+            <div class="vsc-tree-content">
+              <div class="vsc-folder open">
+                <div class="vsc-folder-label">
+                  <span class="vsc-arrow">▾</span>
+                  <span class="vsc-ficon">📁</span>
+                  <span>src</span>
+                </div>
+                <div class="vsc-folder-items">
+                  <button class="vsc-tree-item active" data-file="developer.ts">
+                    <span class="vsc-fbadge ts">TS</span>
+                    <span class="vsc-fname">developer.ts</span>
+                  </button>
+                  <button class="vsc-tree-item" data-file="projects.ts">
+                    <span class="vsc-fbadge ts">TS</span>
+                    <span class="vsc-fname">projects.ts</span>
+                  </button>
+                  <button class="vsc-tree-item" data-file="skills.json">
+                    <span class="vsc-fbadge json">{}</span>
+                    <span class="vsc-fname">skills.json</span>
+                  </button>
+                  <button class="vsc-tree-item" data-file="contact.ts">
+                    <span class="vsc-fbadge ts">TS</span>
+                    <span class="vsc-fname">contact.ts</span>
+                  </button>
+                </div>
+              </div>
+              <button class="vsc-tree-item" data-file="package.json">
+                <span class="vsc-fbadge json">{}</span>
+                <span class="vsc-fname">package.json</span>
+              </button>
+              <button class="vsc-tree-item" data-file="README.md">
+                <span class="vsc-fbadge md">M↓</span>
+                <span class="vsc-fname">README.md</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Contenedor del Editor de Código -->
+      <div class="vsc-editor-container">
+        <!-- Barra de pestañas -->
+        <div class="vsc-tabbar" id="vsc-tabbar" role="tablist"></div>
+
+        <!-- Miga de pan (Breadcrumbs) -->
+        <div class="vsc-breadcrumbs" id="vsc-breadcrumbs">
+          <span>portfolio</span>
+          <span class="vsc-bc-sep">›</span>
+          <span id="vsc-bc-dir">src</span>
+          <span class="vsc-bc-sep">›</span>
+          <span id="vsc-bc-file" class="vsc-bc-active">developer.ts</span>
+        </div>
+
+        <!-- Cuerpo del código y gutter -->
+        <div class="vsc-editor-main">
+          <div class="vsc-editor-scroll" id="vsc-editor-scroll">
+            <div class="vsc-gutter" id="vsc-gutter" aria-hidden="true"></div>
+            <pre class="vsc-code"><code id="vsc-code-content"></code></pre>
+          </div>
+          <!-- Minimapa lateral -->
+          <div class="vsc-minimap" id="vsc-minimap" aria-hidden="true">
+            <div class="vsc-minimap-slider" id="vsc-minimap-slider"></div>
+            <div class="vsc-minimap-lines" id="vsc-minimap-lines"></div>
+          </div>
+        </div>
+
+        <!-- Panel de Terminal inferior -->
+        <div class="vsc-terminal-panel">
+          <div class="vsc-term-header">
+            <div class="vsc-term-tabs">
+              <button class="vsc-term-tab active">TERMINAL</button>
+              <button class="vsc-term-tab">OUTPUT</button>
+              <button class="vsc-term-tab">PROBLEMS <span class="vsc-zero">0</span></button>
+            </div>
+            <div class="vsc-term-info">
+              <span class="vsc-node-tag">node: v20.18</span>
+              <span class="vsc-term-status">● vite ready</span>
+            </div>
+          </div>
+          <div class="vsc-term-content">
+            <div class="vsc-term-line prompt">
+              <span class="t-user">alex@dev-station</span>:<span class="t-path">~/portfolio</span>$ <span class="t-cmd">npm run dev</span>
+            </div>
+            <div class="vsc-term-line info">  VITE v5.4.14  ready in 135 ms</div>
+            <div class="vsc-term-line success">  ➜  Local:   <span class="t-link">http://localhost:5173/</span></div>
+            <div class="vsc-term-line success">  ➜  Storage: <span class="t-accent">Supabase 'imagenes' [habitacion_1] sincronizado</span></div>
+            <div class="vsc-term-line dim">  [HMR] listening for file changes...</div>
+            <div class="vsc-term-line cursor-line">
+              <span class="t-user">alex@dev-station</span>:<span class="t-path">~/portfolio</span>$ <span class="vsc-term-cursor"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de Estado inferior (VS Code StatusBar) -->
+    <footer class="vsc-statusbar">
+      <div class="vsc-status-left">
+        <div class="vsc-status-item branch" title="Rama Git actual">
+          <svg viewBox="0 0 16 16" width="13" height="13">
+            <path fill="currentColor" d="M11.75 2.5a2.25 2.25 0 1 0-3.328 1.96v4.08a2.25 2.25 0 1 0 1.5 0V4.46A2.25 2.25 0 0 0 11.75 2.5zm-5 7a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0-7a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm5 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"/>
+          </svg>
+          <span>main*</span>
+        </div>
+        <div class="vsc-status-item sync" title="Sincronizar cambios">↻ 0 ↓ 1 ↑</div>
+        <div class="vsc-status-item errors" title="Errores y advertencias">
+          <span class="err-icon">⊗</span> 0 <span class="warn-icon">⚠</span> 0
+        </div>
+      </div>
+      <div class="vsc-status-right">
+        <div class="vsc-status-item" id="screen-clock">--:--</div>
+        <div class="vsc-status-item" id="vsc-status-pos">Ln 1, Col 1</div>
+        <div class="vsc-status-item">Spaces: 2</div>
+        <div class="vsc-status-item">UTF-8</div>
+        <div class="vsc-status-item lang" id="vsc-status-lang">TypeScript</div>
+        <div class="vsc-status-item prettier">Prettier ✓</div>
+        <button class="vsc-status-item exit-btn" data-close title="Cerrar editor (Esc)">
+          <span>✕ Cerrar pantalla (Esc)</span>
+        </button>
+      </div>
+    </footer>
   </div>
 
   <script type="module" src="/src/main.js"></script>

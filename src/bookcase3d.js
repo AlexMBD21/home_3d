@@ -4,18 +4,19 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import anime from 'animejs';
+import { getStorageUrl } from './supabase.js';
 
 const WALL_SIZE = 10;
-const MUSIC_URL = '/music/Harry Styles - Sign of the Times (Official Video).mp3';
-const LIGHTHOUSE_URL = '/img/3d/faro.glb';
-const BONSAI_TREE_URL = '/img/3d/arbol.glb';
+const LOCAL_MUSIC_URL = '/music/Harry Styles - Sign of the Times (Official Video).mp3';
+const MUSIC_URL = getStorageUrl('mp3/Harry Styles - Sign of the Times (Official Video).mp3');
+const LOCAL_LIGHTHOUSE_URL = '/img/3d/faro.glb';
+const LIGHTHOUSE_URL = getStorageUrl('3d/faro.glb');
 
-// Rutas de las 3 pinturas para los cuadros superiores (izquierdo, central, derecho).
-// Cuando tengas las imágenes en public/img/, coloca sus rutas aquí (ej. '/img/pintura1.jpg').
+// Rutas de las 3 pinturas para los cuadros superiores desde Supabase Storage.
 export const FRAME_PAINTINGS = [
-  '/img/cuadros/cuadro_1.jpg', // Cuadro 1 (Izquierda)
-  '/img/cuadros/cuadro_2.jpg', // Cuadro 2 (Centro)
-  '/img/cuadros/cuadro_3.jpg', // Cuadro 3 (Derecha)
+  getStorageUrl('cuadros/cuadro_1.jpg'), // Cuadro 1 (Izquierda)
+  getStorageUrl('cuadros/cuadro_2.jpg'), // Cuadro 2 (Centro)
+  getStorageUrl('cuadros/cuadro_3.jpg'), // Cuadro 3 (Derecha)
 ];
 
 // Coordenadas UV exactas medidas de izquierda.jpg
@@ -796,204 +797,55 @@ export function createBookcase3D(theme = 'light') {
     lighthouseAnchor.add(lhShadow);
 
     const gltfLoader = new GLTFLoader();
-    gltfLoader.load(
-      LIGHTHOUSE_URL,
-      (gltf) => {
-        const model = gltf.scene;
-        model.updateMatrixWorld(true);
+    const loadLighthouse = (url, isFallback = false) => {
+      gltfLoader.load(
+        url,
+        (gltf) => {
+          const model = gltf.scene;
+          model.updateMatrixWorld(true);
 
-        const box = new THREE.Box3().setFromObject(model);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
+          const box = new THREE.Box3().setFromObject(model);
+          const size = new THREE.Vector3();
+          const center = new THREE.Vector3();
+          box.getSize(size);
+          box.getCenter(center);
 
-        // Escalar para que encaje entre la cubierta del estante y el cuadro superior izquierdo (~0.88 unidades de alto)
-        const targetH = 0.88;
-        const maxFootprint = depth * 0.82;
-        const scaleByH = targetH / Math.max(size.y, 0.001);
-        const scaleByFoot = maxFootprint / Math.max(size.x, size.z, 0.001);
-        const scale = Math.min(scaleByH, scaleByFoot);
+          // Escalar para que encaje entre la cubierta del estante y el cuadro superior izquierdo (~0.88 unidades de alto)
+          const targetH = 0.88;
+          const maxFootprint = depth * 0.82;
+          const scaleByH = targetH / Math.max(size.y, 0.001);
+          const scaleByFoot = maxFootprint / Math.max(size.x, size.z, 0.001);
+          const scale = Math.min(scaleByH, scaleByFoot);
 
-        model.scale.setScalar(scale);
-        model.position.set(
-          -center.x * scale,
-          -box.min.y * scale,
-          -center.z * scale
-        );
+          model.scale.setScalar(scale);
+          model.position.set(
+            -center.x * scale,
+            -box.min.y * scale,
+            -center.z * scale
+          );
 
-        model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
-        });
-
-        lighthouseAnchor.add(model);
-      },
-      undefined,
-      (err) => {
-        console.warn('No se pudo cargar faro.glb:', err);
-      }
-    );
-
-    // Árbol Bonsái 3D (arbol.glb en versión miniatura dentro de una macetera tradicional de bonsái) al lado del faro
-    const bBase = uvToLocal(0.368, 0.508);
-    const bonsaiAnchor = new THREE.Group();
-    bonsaiAnchor.position.set(bBase.x, bBase.y, depth * 0.52);
-    group.add(bonsaiAnchor);
-
-    // Sombra de contacto debajo de la macetera del bonsái
-    const bonsaiShadow = createDropShadow(0.46, 0.36, 0.12, 0.45);
-    bonsaiShadow.rotation.x = -Math.PI / 2;
-    bonsaiShadow.position.set(0, 0.004, 0);
-    bonsaiAnchor.add(bonsaiShadow);
-
-    // Materiales de la macetera bonsái (cerámica esmaltada terracota oscuro + borde + musgo)
-    const bonsaiPotMat = new THREE.MeshStandardMaterial({
-      color: 0x5c3a2d,
-      roughness: 0.36,
-      metalness: 0.08,
-    });
-    const bonsaiRimMat = new THREE.MeshStandardMaterial({
-      color: 0x6e4738,
-      roughness: 0.32,
-      metalness: 0.1,
-    });
-    const mossMat = new THREE.MeshStandardMaterial({
-      color: 0x4b7832,
-      roughness: 0.78,
-      metalness: 0.02,
-    });
-    const stoneMat = new THREE.MeshStandardMaterial({
-      color: 0x8a857d,
-      roughness: 0.65,
-      metalness: 0.04,
-    });
-
-    const potW = 0.36;
-    const potD = 0.26;
-    const potH = 0.105;
-    const footH = 0.022;
-
-    // 4 patitas tradicionales de macetera bonsái
-    const footGeo = new THREE.BoxGeometry(0.055, footH, 0.045);
-    for (const [fx, fz] of [
-      [-potW * 0.36, -potD * 0.34],
-      [potW * 0.36, -potD * 0.34],
-      [-potW * 0.36, potD * 0.34],
-      [potW * 0.36, potD * 0.34],
-    ]) {
-      const foot = new THREE.Mesh(footGeo, bonsaiPotMat);
-      foot.position.set(fx, footH / 2, fz);
-      foot.castShadow = true;
-      foot.receiveShadow = true;
-      bonsaiAnchor.add(foot);
-    }
-
-    // Bandeja cerámica achaflanada (más ancha arriba que en la base)
-    const trayGeo = new THREE.CylinderGeometry(1, 0.82, potH, 4);
-    trayGeo.rotateY(Math.PI / 4);
-    trayGeo.scale(potW * 0.707, 1, potD * 0.707);
-    const trayMesh = new THREE.Mesh(trayGeo, bonsaiPotMat);
-    trayMesh.position.y = footH + potH / 2;
-    trayMesh.castShadow = true;
-    trayMesh.receiveShadow = true;
-    bonsaiAnchor.add(trayMesh);
-
-    // Labio / reborde superior de la macetera bonsái
-    const rimH = 0.022;
-    const rimTopY = footH + potH;
-    const rimBarFront = new THREE.Mesh(new THREE.BoxGeometry(potW + 0.03, rimH, 0.028), bonsaiRimMat);
-    rimBarFront.position.set(0, rimTopY, potD / 2);
-    bonsaiAnchor.add(rimBarFront);
-
-    const rimBarBack = new THREE.Mesh(new THREE.BoxGeometry(potW + 0.03, rimH, 0.028), bonsaiRimMat);
-    rimBarBack.position.set(0, rimTopY, -potD / 2);
-    bonsaiAnchor.add(rimBarBack);
-
-    const rimBarLeft = new THREE.Mesh(new THREE.BoxGeometry(0.028, rimH, potD + 0.03), bonsaiRimMat);
-    rimBarLeft.position.set(-potW / 2, rimTopY, 0);
-    bonsaiAnchor.add(rimBarLeft);
-
-    const rimBarRight = new THREE.Mesh(new THREE.BoxGeometry(0.028, rimH, potD + 0.03), bonsaiRimMat);
-    rimBarRight.position.set(potW / 2, rimTopY, 0);
-    bonsaiAnchor.add(rimBarRight);
-
-    // Sustrato de tierra oscura y montículos de musgo verde + piedritas zen
-    const soilY = footH + potH - 0.006;
-    const bonsaiSoil = new THREE.Mesh(new THREE.BoxGeometry(potW - 0.03, 0.016, potD - 0.03), soilMat);
-    bonsaiSoil.position.y = soilY;
-    bonsaiAnchor.add(bonsaiSoil);
-
-    for (const [mx, mz, mr] of [
-      [-0.07, 0.03, 0.055],
-      [0.08, -0.02, 0.050],
-      [-0.02, -0.04, 0.060],
-      [0.04, 0.04, 0.045],
-    ]) {
-      const mossMound = new THREE.Mesh(new THREE.SphereGeometry(mr, 10, 8), mossMat);
-      mossMound.scale.set(1.3, 0.35, 1.1);
-      mossMound.position.set(mx, soilY + 0.008, mz);
-      bonsaiAnchor.add(mossMound);
-    }
-
-    for (const [sx, sz, sr] of [
-      [0.10, 0.04, 0.022],
-      [0.07, 0.06, 0.016],
-    ]) {
-      const pebble = new THREE.Mesh(new THREE.DodecahedronGeometry(sr, 0), stoneMat);
-      pebble.scale.set(1.2, 0.65, 1.0);
-      pebble.position.set(sx, soilY + 0.01, sz);
-      bonsaiAnchor.add(pebble);
-    }
-
-    // Cargar arbol.glb escalado pequeño como bonsái sobre el sustrato de la macetera
-    gltfLoader.load(
-      BONSAI_TREE_URL,
-      (gltf) => {
-        const treeModel = gltf.scene;
-        // Girar -90° en Y (180° opuesto a la pared) para que el frente de las hojas mire hacia la habitación (+Z)
-        treeModel.rotation.y = -Math.PI / 2;
-        treeModel.updateMatrixWorld(true);
-
-        const box = new THREE.Box3().setFromObject(treeModel);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
-
-        // Escalar pequeño (~0.50 unidades de altura) para lucir como bonsái junto al faro (0.88)
-        const targetTreeH = 0.50;
-        const maxCrownSpan = 0.44;
-        const scaleH = targetTreeH / Math.max(size.y, 0.001);
-        const scaleSpan = maxCrownSpan / Math.max(size.x, size.z, 0.001);
-        const scale = Math.min(scaleH, scaleSpan);
-
-        treeModel.scale.setScalar(scale);
-        treeModel.position.set(
-          -center.x * scale,
-          soilY - 0.008 - box.min.y * scale,
-          -center.z * scale
-        );
-
-        treeModel.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            if (child.material) {
-              child.material.side = THREE.DoubleSide;
+          model.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
             }
-          }
-        });
+          });
 
-        bonsaiAnchor.add(treeModel);
-      },
-      undefined,
-      (err) => {
-        console.warn('No se pudo cargar arbol.glb:', err);
-      }
-    );
+          lighthouseAnchor.add(model);
+        },
+        undefined,
+        (err) => {
+          if (!isFallback && url !== LOCAL_LIGHTHOUSE_URL) {
+            console.warn('Cargando faro.glb local como respaldo:', err);
+            loadLighthouse(LOCAL_LIGHTHOUSE_URL, true);
+          } else {
+            console.warn('No se pudo cargar faro.glb:', err);
+          }
+        }
+      );
+    };
+
+    loadLighthouse(LIGHTHOUSE_URL);
   }
 
   // Lámpara cálida 3D sobre la cubierta superior derecha (u = 0.668)
@@ -1248,7 +1100,8 @@ export function createBookcase3D(theme = 'light') {
   function setFramePaintings(urls = FRAME_PAINTINGS) {
     urls.forEach((url, idx) => {
       if (!url || !frameCanvasMats[idx]) return;
-      texLoader.load(encodeURI(url), (tex) => {
+      const finalUrl = getStorageUrl(url);
+      texLoader.load(encodeURI(finalUrl), (tex) => {
         tex.colorSpace = THREE.SRGBColorSpace;
         frameCanvasMats[idx].map = tex;
         frameCanvasMats[idx].needsUpdate = true;
@@ -1282,9 +1135,16 @@ export function createBookcase3D(theme = 'light') {
     }
   }
 
-  const audio = new Audio(encodeURI(MUSIC_URL));
+  const audio = new Audio();
+  audio.crossOrigin = 'anonymous';
+  audio.src = MUSIC_URL;
   audio.loop = true;
   audio.volume = 0.75;
+  audio.addEventListener('error', () => {
+    if (!audio.src.includes(LOCAL_MUSIC_URL)) {
+      audio.src = LOCAL_MUSIC_URL;
+    }
+  });
 
   let audioCtx = null;
   let analyser = null;

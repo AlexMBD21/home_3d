@@ -4,7 +4,7 @@
 // `modal` (opcional) indica qué contenido de MODALS abre; por defecto el propio id.
 
 export const HOTSPOTS = [
-  { id: 'pc',       wall: 'frontal',   label: 'Mis proyectos', rect: [0.27, 0.49, 0.73, 0.65], fullscreen: true },
+  { id: 'pc',       wall: 'frontal',   label: 'Visual Studio Code', rect: [0.27, 0.49, 0.73, 0.65], fullscreen: true },
   { id: 'libreros', wall: 'izquierda', label: 'Habilidades',   rect: [0.21, 0.54, 0.79, 0.99] },
   { id: 'ventana',  wall: 'derecha',   label: 'Sobre mí',      rect: [0.34, 0.23, 0.66, 0.665] },
   { id: 'pizarra',  wall: 'trasera',   label: 'Contacto',      rect: [0.59, 0.285, 0.986, 0.61], modal: 'contacto' },
